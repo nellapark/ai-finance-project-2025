@@ -1,1 +1,1 @@
-export * from './spending-simulation';
+export * from './pages/spending-simulation';

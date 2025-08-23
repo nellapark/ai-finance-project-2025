@@ -62,7 +62,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
     // Add X axis
     g.append('g')
       .attr('transform', `translate(0,${innerHeight})`)
-      .call(d3.axisBottom(xScale).tickFormat(d3.timeFormat('%b %Y')))
+      .call(d3.axisBottom(xScale).tickFormat(d3.timeFormat('%b %Y') as (domainValue: Date | d3.NumberValue, index: number) => string))
       .append('text')
       .attr('x', innerWidth / 2)
       .attr('y', 35)
