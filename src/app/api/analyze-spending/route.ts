@@ -313,9 +313,9 @@ Return your response as valid JSON with this exact structure:
     ],
     "significantTransactions": [
       {
-        "description": "Large purchase pattern",
-        "averageAmount": -500.00,
-        "frequency": "quarterly",
+        "description": "Statistically significant purchase",
+        "averageAmount": -200.00,
+        "frequency": "irregular",
         "category": "Shopping",
         "lastOccurrence": "2024-03-15",
         "predictedNext": "2024-06-15"
@@ -432,7 +432,7 @@ Return your response as valid JSON with this exact structure:
    - Find ALL recurring transactions (salary, rent, utilities, subscriptions, loan payments)
    - Calculate average amounts and frequencies for each recurring transaction
    - Detect seasonal patterns (higher utilities in summer/winter, holiday spending)
-   - Identify irregular large purchases and their typical frequency
+   - Identify statistically significant transactions (those that deviate significantly from typical spending patterns)
    - Analyze spending categories and their typical amounts and frequency
 
 2. GENERATING COMPREHENSIVE TRANSACTIONS (MINIMUM 150 TRANSACTIONS):
@@ -442,7 +442,7 @@ Return your response as valid JSON with this exact structure:
    - Add variable expenses: shopping, entertainment, healthcare, subscriptions
    - Vary amounts realistically: groceries ($80-150), gas ($35-65), dining ($15-80)
    - Account for seasonal variations: utilities +30% in summer/winter, holiday spending in Dec
-   - Include occasional large purchases based on historical patterns (quarterly/annually)
+   - Include occasional statistically significant purchases based on historical patterns (those that are 2+ standard deviations from the mean transaction amount)
 
 3. TRANSACTION DISTRIBUTION PER MONTH:
    - Month 1-12: Each month should have 12-20 transactions minimum
@@ -460,7 +460,7 @@ Return your response as valid JSON with this exact structure:
 5. CONFIDENCE SCORING:
    - High confidence (0.9+): Regular income, fixed expenses (rent, loans, utilities)
    - Medium confidence (0.7-0.9): Regular but variable (groceries, gas, dining)
-   - Low confidence (0.5-0.7): Irregular purchases, entertainment, large purchases
+   - Low confidence (0.5-0.7): Irregular purchases, entertainment, statistically significant outlier transactions
 
 CRITICAL REQUIREMENTS:
 1. Generate EXACTLY 150-200 individual transactions covering the full 12-month period
@@ -820,8 +820,22 @@ function createMockAnalysis(simulatedTransactions: FallbackTransaction[]): MockA
     nextOccurrence: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   }));
   
+  // Calculate statistical significance for large transactions
+  const expenseAmounts = expenses.map(t => Math.abs(t.amount));
+  const mean = expenseAmounts.reduce((sum, amount) => sum + amount, 0) / expenseAmounts.length;
+  const variance = expenseAmounts.reduce((sum, amount) => sum + Math.pow(amount - mean, 2), 0) / expenseAmounts.length;
+  const standardDeviation = Math.sqrt(variance);
+  const largeTransactionThreshold = mean + (2 * standardDeviation);
+  
+  console.log('📊 [API] Transaction statistics for mock analysis:', {
+    totalExpenses: expenseAmounts.length,
+    mean: mean.toFixed(2),
+    standardDeviation: standardDeviation.toFixed(2),
+    largeTransactionThreshold: largeTransactionThreshold.toFixed(2)
+  });
+
   const significantTransactions = expenses
-    .filter(t => Math.abs(t.amount) > 500)
+    .filter(t => Math.abs(t.amount) > largeTransactionThreshold)
     .slice(0, 5)
     .map(t => ({
       description: t.description,

@@ -153,12 +153,28 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
   };
 
   const handleGenerateTestData = () => {
-    console.log('🧪 [Test] Generating test data directly');
+    console.log('🧪 [Test] Generating test data with statistical outliers');
     const testData: DataPoint[] = [];
     let cumulativeTotal = 0;
     
-    for (let i = 0; i < 20; i++) {
-      const amount = Math.random() * 500 + 50;
+    // Generate mostly small transactions ($5-$25) with a few statistical outliers
+    for (let i = 0; i < 30; i++) {
+      let amount: number;
+      let description: string;
+      let category: string;
+      
+      if (i < 25) {
+        // Regular small transactions
+        amount = Math.random() * 20 + 5; // $5-$25
+        description = ['Coffee Shop', 'Lunch', 'Gas Station', 'Grocery Store', 'Parking'][Math.floor(Math.random() * 5)];
+        category = ['Food & Dining', 'Transportation', 'Groceries'][Math.floor(Math.random() * 3)];
+      } else {
+        // Statistical outliers (much larger than typical)
+        amount = Math.random() * 200 + 150; // $150-$350 (outliers for this dataset)
+        description = ['Electronics Store', 'Department Store', 'Online Shopping', 'Home Improvement'][Math.floor(Math.random() * 4)];
+        category = 'Shopping';
+      }
+      
       cumulativeTotal += amount;
       
       testData.push({
@@ -166,13 +182,20 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
         amount: amount,
         cumulativeBalance: cumulativeTotal,
         originalAmount: -amount,
-        description: `Test Transaction ${i + 1}`,
-        category: 'Test',
-        confidence: 0.8,
-        isRecurring: false,
+        description: `${description} ${i + 1}`,
+        category: category,
+        confidence: i < 25 ? 0.8 : 0.6, // Lower confidence for outliers
+        isRecurring: i < 25 && Math.random() > 0.7, // Some regular transactions are recurring
         type: 'Debit'
       });
     }
+    
+    console.log('📊 [Test] Generated test data with statistical distribution:', {
+      totalTransactions: testData.length,
+      regularTransactions: 25,
+      outlierTransactions: 5,
+      meanAmount: (testData.reduce((sum, t) => sum + t.amount, 0) / testData.length).toFixed(2)
+    });
     
     setHasConnectedData(true);
     animateTransactions(testData);

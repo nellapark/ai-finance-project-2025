@@ -137,9 +137,41 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .attr('stroke-width', 2)
       .style('cursor', 'pointer');
 
-    // Add special indicators for large transactions
+    // Calculate statistical significance for large transactions
+    const amounts = validData.map(d => Math.abs(d.originalAmount || d.amount));
+    
+    // Handle edge cases
+    if (amounts.length === 0) {
+      console.warn('🚫 [Graph] No transaction amounts to analyze');
+      return;
+    }
+    
+    const mean = amounts.reduce((sum, amount) => sum + amount, 0) / amounts.length;
+    const variance = amounts.length > 1 
+      ? amounts.reduce((sum, amount) => sum + Math.pow(amount - mean, 2), 0) / (amounts.length - 1) // Sample variance
+      : 0;
+    const standardDeviation = Math.sqrt(variance);
+    
+    // Define large transactions as those more than 2 standard deviations from the mean
+    // Use a minimum threshold to avoid marking tiny variations as significant
+    const statisticalThreshold = mean + (2 * standardDeviation);
+    const minimumThreshold = mean * 1.5; // At least 50% above mean
+    const largeTransactionThreshold = Math.max(statisticalThreshold, minimumThreshold);
+    
+    console.log('📊 [Graph] Transaction statistics:', {
+      totalTransactions: amounts.length,
+      mean: mean.toFixed(2),
+      standardDeviation: standardDeviation.toFixed(2),
+      statisticalThreshold: statisticalThreshold.toFixed(2),
+      minimumThreshold: minimumThreshold.toFixed(2),
+      finalThreshold: largeTransactionThreshold.toFixed(2),
+      largeTransactionCount: amounts.filter(amount => amount > largeTransactionThreshold).length,
+      percentageOutliers: ((amounts.filter(amount => amount > largeTransactionThreshold).length / amounts.length) * 100).toFixed(1) + '%'
+    });
+
+    // Add special indicators for statistically large transactions
     g.selectAll('.large-transaction')
-      .data(validData.filter(d => Math.abs(d.originalAmount || d.amount) > 500))
+      .data(validData.filter(d => Math.abs(d.originalAmount || d.amount) > largeTransactionThreshold))
       .enter()
       .append('circle')
       .attr('class', 'large-transaction')
@@ -275,7 +307,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .attr('x', 25)
       .attr('y', legendY + 5)
       .style('font-size', '12px')
-      .text('Large Transactions ($500+)');
+      .text(`Statistical Outliers (>${largeTransactionThreshold.toFixed(0)})`);
 
     // Cleanup tooltip on component unmount
     return () => {
