@@ -1,0 +1,80 @@
+Date,Description,Amount,Category,Account,Type
+2024-01-01,Starting Balance,75000.00,Transfer,Checking,Credit
+2024-01-02,Starbucks Coffee,-4.85,Food & Dining,Credit Card,Debit
+2024-01-03,Grocery Store,-127.43,Groceries,Checking,Debit
+2024-01-05,Salary Deposit,4500.00,Income,Checking,Credit
+2024-01-07,Electric Bill,-89.32,Utilities,Checking,Debit
+2024-01-08,Gas Station,-45.67,Transportation,Credit Card,Debit
+2024-01-10,Restaurant Dinner,-78.90,Food & Dining,Credit Card,Debit
+2024-01-12,Online Shopping,-156.78,Shopping,Credit Card,Debit
+2024-01-15,Rent Payment,-1800.00,Housing,Checking,Debit
+2024-01-18,Gym Membership,-29.99,Health & Fitness,Checking,Debit
+2024-01-20,Grocery Store,-98.45,Groceries,Checking,Debit
+2024-01-22,Movie Theater,-24.50,Entertainment,Credit Card,Debit
+2024-01-25,Gas Station,-52.30,Transportation,Credit Card,Debit
+2024-01-28,Coffee Shop,-6.75,Food & Dining,Credit Card,Debit
+2024-01-30,Phone Bill,-85.00,Utilities,Checking,Debit
+2024-02-01,Grocery Store,-134.22,Groceries,Checking,Debit
+2024-02-03,Online Subscription,-9.99,Entertainment,Credit Card,Debit
+2024-02-05,Salary Deposit,4500.00,Income,Checking,Credit
+2024-02-07,Insurance Payment,-125.00,Insurance,Checking,Debit
+2024-02-10,Restaurant Lunch,-32.45,Food & Dining,Credit Card,Debit
+2024-02-12,Gas Station,-48.90,Transportation,Credit Card,Debit
+2024-02-15,Rent Payment,-1800.00,Housing,Checking,Debit
+2024-02-18,Clothing Store,-89.99,Shopping,Credit Card,Debit
+2024-02-20,Grocery Store,-112.67,Groceries,Checking,Debit
+2024-02-22,Streaming Service,-14.99,Entertainment,Credit Card,Debit
+2024-02-25,Medical Appointment,-150.00,Healthcare,Checking,Debit
+2024-02-28,Utility Bill,-95.43,Utilities,Checking,Debit
+2024-03-01,Coffee Shop,-5.25,Food & Dining,Credit Card,Debit
+2024-03-03,Grocery Store,-145.89,Groceries,Checking,Debit
+2024-03-05,Salary Deposit,4500.00,Income,Checking,Credit
+2024-03-08,Car Maintenance,-275.00,Transportation,Checking,Debit
+2024-03-10,Restaurant Dinner,-95.60,Food & Dining,Credit Card,Debit
+2024-03-12,Online Shopping,-67.34,Shopping,Credit Card,Debit
+2024-03-15,Rent Payment,-1800.00,Housing,Checking,Debit
+2024-03-18,Gym Membership,-29.99,Health & Fitness,Checking,Debit
+2024-03-20,Grocery Store,-103.78,Groceries,Checking,Debit
+2024-03-22,Gas Station,-41.25,Transportation,Credit Card,Debit
+2024-03-25,Book Purchase,-23.99,Education,Credit Card,Debit
+2024-03-28,Pharmacy,-18.45,Healthcare,Checking,Debit
+2024-03-30,Electric Bill,-92.18,Utilities,Checking,Debit
+2024-04-01,Coffee Shop,-4.95,Food & Dining,Credit Card,Debit
+2024-04-03,Grocery Store,-128.56,Groceries,Checking,Debit
+2024-04-05,Salary Deposit,4500.00,Income,Checking,Credit
+2024-04-08,Internet Bill,-79.99,Utilities,Checking,Debit
+2024-04-10,Restaurant Lunch,-28.75,Food & Dining,Credit Card,Debit
+2024-04-12,Gas Station,-46.80,Transportation,Credit Card,Debit
+2024-04-15,Rent Payment,-1800.00,Housing,Checking,Debit
+2024-04-18,Online Subscription,-12.99,Entertainment,Credit Card,Debit
+2024-04-20,Grocery Store,-115.43,Groceries,Checking,Debit
+2024-04-22,Movie Theater,-26.00,Entertainment,Credit Card,Debit
+2024-04-25,Clothing Store,-156.78,Shopping,Credit Card,Debit
+2024-04-28,Medical Copay,-25.00,Healthcare,Checking,Debit
+2024-04-30,Phone Bill,-85.00,Utilities,Checking,Debit
+2024-05-01,Grocery Store,-139.87,Groceries,Checking,Debit
+2024-05-03,Coffee Shop,-6.50,Food & Dining,Credit Card,Debit
+2024-05-05,Salary Deposit,4500.00,Income,Checking,Credit
+2024-05-08,Car Insurance,-180.00,Insurance,Checking,Debit
+2024-05-10,Restaurant Dinner,-87.45,Food & Dining,Credit Card,Debit
+2024-05-12,Gas Station,-51.20,Transportation,Credit Card,Debit
+2024-05-15,Rent Payment,-1800.00,Housing,Checking,Debit
+2024-05-18,Gym Membership,-29.99,Health & Fitness,Checking,Debit
+2024-05-20,Grocery Store,-98.76,Groceries,Checking,Debit
+2024-05-22,Streaming Service,-14.99,Entertainment,Credit Card,Debit
+2024-05-25,Online Shopping,-234.56,Shopping,Credit Card,Debit
+2024-05-28,Utility Bill,-103.27,Utilities,Checking,Debit
+2024-05-30,Coffee Shop,-5.75,Food & Dining,Credit Card,Debit
+2024-06-01,Grocery Store,-142.33,Groceries,Checking,Debit
+2024-06-03,Gas Station,-44.90,Transportation,Credit Card,Debit
+2024-06-05,Salary Deposit,4500.00,Income,Checking,Credit
+2024-06-08,Home Improvement,-456.78,Home & Garden,Checking,Debit
+2024-06-10,Restaurant Lunch,-34.25,Food & Dining,Credit Card,Debit
+2024-06-12,Online Subscription,-9.99,Entertainment,Credit Card,Debit
+2024-06-15,Rent Payment,-1800.00,Housing,Checking,Debit
+2024-06-18,Medical Appointment,-200.00,Healthcare,Checking,Debit
+2024-06-20,Grocery Store,-126.89,Groceries,Checking,Debit
+2024-06-22,Movie Theater,-28.50,Entertainment,Credit Card,Debit
+2024-06-25,Gas Station,-49.75,Transportation,Credit Card,Debit
+2024-06-28,Phone Bill,-85.00,Utilities,Checking,Debit
+2024-06-30,Coffee Shop,-4.25,Food & Dining,Credit Card,Debit

@@ -12,7 +12,7 @@ interface FileUploadProps {
 const FileUpload: React.FC<FileUploadProps> = ({
   onFileUpload,
   type,
-  accept = '.csv,.xlsx,.json',
+  accept = '.csv',
   className = '',
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
@@ -57,8 +57,8 @@ const FileUpload: React.FC<FileUploadProps> = ({
 
   const getDescription = () => {
     return type === 'transactions'
-      ? 'Upload your bank transaction history (CSV, Excel, or JSON format)'
-      : 'Upload credit card statements, loan information, and payment history';
+      ? 'Upload your bank transaction history (CSV format)'
+      : 'Upload credit card statements, loan information, and payment history (CSV format)';
   };
 
   const getExampleFields = () => {
@@ -133,7 +133,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
               </label>
             </p>
             <p className="text-xs text-gray-500">
-              Supports CSV, Excel, and JSON files
+              Supports CSV files only
             </p>
           </div>
         )}

@@ -1,0 +1,6 @@
+Account Type,Account Name,Balance,Interest Rate,Minimum Payment,Due Date,Credit Limit,Loan Term,Monthly Payment
+Credit Card,"Chase Freedom Unlimited",2450.75,18.99,75.00,"15th of each month",8000,,
+Credit Card,"Capital One Venture",1825.30,21.24,55.00,"22nd of each month",5000,,
+Auto Loan,"Honda Civic Loan",18750.00,4.25,385.50,"5th of each month",,60,385.50
+Student Loan,"Federal Student Loan",12500.00,5.50,145.00,"28th of each month",,120,145.00
+Personal Loan,"Home Improvement Loan",8200.00,7.99,245.00,"10th of each month",,36,245.00
