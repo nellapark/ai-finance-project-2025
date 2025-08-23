@@ -6,7 +6,6 @@ import * as d3 from 'd3';
 interface DataPoint {
   time: Date;
   amount: number;
-  cumulativeBalance?: number;
   originalAmount?: number;
   description?: string;
   category?: string;
@@ -55,7 +54,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
 
     const yScale = d3
       .scaleLinear()
-      .domain(d3.extent(data, (d) => d.cumulativeBalance || d.amount) as [number, number])
+      .domain([0, d3.max(data, (d) => d.amount) as number])
       .nice()
       .range([innerHeight, 0]);
 
@@ -81,31 +80,18 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .attr('fill', 'currentColor')
       .style('text-anchor', 'middle')
       .style('font-size', '12px')
-      .text('Account Balance ($)');
+      .text('Transaction Amount ($)');
 
-    // Create line generator for cumulative balance
-    const line = d3
-      .line<DataPoint>()
-      .x((d) => xScale(d.time))
-      .y((d) => yScale(d.cumulativeBalance || d.amount))
-      .curve(d3.curveMonotoneX);
+    // No line graph - just individual transaction points
 
-    // Add the main balance line
-    g.append('path')
-      .datum(data)
-      .attr('fill', 'none')
-      .attr('stroke', '#3b82f6')
-      .attr('stroke-width', 3)
-      .attr('d', line);
-
-    // Add data points on the line
-    g.selectAll('.balance-point')
+    // Add transaction points
+    g.selectAll('.transaction-point')
       .data(data)
       .enter()
       .append('circle')
-      .attr('class', 'balance-point')
+      .attr('class', 'transaction-point')
       .attr('cx', (d) => xScale(d.time))
-      .attr('cy', (d) => yScale(d.cumulativeBalance || d.amount))
+      .attr('cy', (d) => yScale(d.amount))
       .attr('r', 4)
       .attr('fill', '#3b82f6')
       .attr('stroke', '#ffffff')
@@ -119,7 +105,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .append('circle')
       .attr('class', 'large-transaction')
       .attr('cx', (d) => xScale(d.time))
-      .attr('cy', (d) => yScale(d.cumulativeBalance || d.amount))
+      .attr('cy', (d) => yScale(d.amount))
       .attr('r', 8)
       .attr('fill', 'none')
       .attr('stroke', '#ef4444')
@@ -139,13 +125,13 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .style('pointer-events', 'none')
       .style('z-index', '1000');
 
-    g.selectAll('.balance-point')
+    g.selectAll('.transaction-point')
       .on('mouseover', function(event, d) {
         tooltip.style('visibility', 'visible')
           .html(`
-            <strong>${d.description || 'Balance Point'}</strong><br/>
-            Balance: $${(d.cumulativeBalance || d.amount).toLocaleString()}<br/>
-            Transaction: $${(d.originalAmount || 0).toFixed(2)}<br/>
+            <strong>${d.description || 'Transaction'}</strong><br/>
+            Amount: $${d.amount.toLocaleString()}<br/>
+            Original: $${(d.originalAmount || 0).toFixed(2)}<br/>
             Category: ${d.category || 'N/A'}<br/>
             Date: ${d.time.toLocaleDateString()}<br/>
             ${d.isRecurring ? `Recurring: Yes` : ''}<br/>
@@ -197,25 +183,10 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .attr('class', 'legend')
       .attr('transform', `translate(${width - 200}, 20)`);
 
-    // Balance line legend
-    legend.append('line')
-      .attr('x1', 0)
-      .attr('y1', 0)
-      .attr('x2', 20)
-      .attr('y2', 0)
-      .attr('stroke', '#3b82f6')
-      .attr('stroke-width', 3);
-    
-    legend.append('text')
-      .attr('x', 25)
-      .attr('y', 5)
-      .style('font-size', '12px')
-      .text('Account Balance');
-
-    // Balance points legend
+    // Transaction points legend
     legend.append('circle')
       .attr('cx', 10)
-      .attr('cy', 20)
+      .attr('cy', 10)
       .attr('r', 4)
       .attr('fill', '#3b82f6')
       .attr('stroke', '#ffffff')
@@ -223,14 +194,14 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
     
     legend.append('text')
       .attr('x', 25)
-      .attr('y', 25)
+      .attr('y', 15)
       .style('font-size', '12px')
-      .text('Transaction Points');
+      .text('Transaction Amounts');
 
     // Large transaction legend
     legend.append('circle')
       .attr('cx', 10)
-      .attr('cy', 40)
+      .attr('cy', 30)
       .attr('r', 6)
       .attr('fill', 'none')
       .attr('stroke', '#ef4444')
@@ -238,9 +209,9 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
     
     legend.append('text')
       .attr('x', 25)
-      .attr('y', 45)
+      .attr('y', 35)
       .style('font-size', '12px')
-      .text('Large Transactions');
+      .text('Large Transactions ($500+)');
 
     // Cleanup tooltip on component unmount
     return () => {

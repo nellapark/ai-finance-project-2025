@@ -1,12 +1,13 @@
 import Papa from 'papaparse';
 
 export interface TransactionData {
-  date: string;
+  transaction_date: string;
+  post_date: string;
   description: string;
-  amount: number;
   category: string;
-  account: string;
   type: string;
+  amount: number;
+  memo: string;
 }
 
 export interface DebtData {
@@ -52,14 +53,15 @@ export function parseTransactionCSV(file: File): Promise<TransactionData[]> {
             console.warn('⚠️ [CSV Parser] Parsing warnings:', results.errors);
           }
 
-          const transactions: TransactionData[] = results.data.map((row: any, index: number) => {
+          const transactions: TransactionData[] = results.data.map((row: Record<string, any>, index: number) => {
             const transaction = {
-              date: row.Date || row.date || '',
+              transaction_date: row['Transaction Date'] || row.transaction_date || row.Date || row.date || '',
+              post_date: row['Post Date'] || row.post_date || row['Transaction Date'] || row.transaction_date || row.Date || row.date || '',
               description: row.Description || row.description || '',
-              amount: parseFloat(row.Amount || row.amount || '0'),
               category: row.Category || row.category || '',
-              account: row.Account || row.account || '',
               type: row.Type || row.type || '',
+              amount: parseFloat(row.Amount || row.amount || '0'),
+              memo: row.Memo || row.memo || '',
             };
 
             if (index < 3) {
@@ -71,7 +73,7 @@ export function parseTransactionCSV(file: File): Promise<TransactionData[]> {
           
           // Filter out invalid transactions
           const validTransactions = transactions.filter(t => 
-            t.date && t.description && !isNaN(t.amount)
+            t.transaction_date && t.description && !isNaN(t.amount)
           );
 
           const invalidCount = transactions.length - validTransactions.length;
@@ -81,8 +83,8 @@ export function parseTransactionCSV(file: File): Promise<TransactionData[]> {
             validTransactions: validTransactions.length,
             invalidTransactions: invalidCount,
             dateRange: validTransactions.length > 0 ? {
-              first: validTransactions[0].date,
-              last: validTransactions[validTransactions.length - 1].date
+              first: validTransactions[0].transaction_date,
+              last: validTransactions[validTransactions.length - 1].transaction_date
             } : null,
             totalAmount: validTransactions.reduce((sum, t) => sum + t.amount, 0)
           });
@@ -143,7 +145,7 @@ export function parseDebtCSV(file: File): Promise<DebtData[]> {
             console.warn('⚠️ [CSV Parser] Debt parsing warnings:', results.errors);
           }
 
-          const debts: DebtData[] = results.data.map((row: any, index: number) => {
+          const debts: DebtData[] = results.data.map((row: Record<string, any>, index: number) => {
             const debt = {
               account_type: row.Account_Type || row.account_type || '',
               account_name: row.Account_Name || row.account_name || '',

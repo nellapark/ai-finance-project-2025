@@ -63,7 +63,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
 
   const getExampleFields = () => {
     return type === 'transactions'
-      ? ['Date', 'Description', 'Amount', 'Category', 'Account']
+      ? ['Transaction Date', 'Post Date', 'Description', 'Category', 'Type', 'Amount', 'Memo']
       : ['Account Type', 'Balance', 'Interest Rate', 'Minimum Payment', 'Due Date'];
   };
 

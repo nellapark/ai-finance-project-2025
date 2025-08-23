@@ -54,8 +54,8 @@ export async function POST(request: NextRequest) {
         firstTransaction: transactionData[0],
         totalAmount: transactionData.reduce((sum: number, t: { amount?: number }) => sum + (t.amount || 0), 0),
         dateRange: {
-          first: transactionData[0]?.date,
-          last: transactionData[transactionData.length - 1]?.date
+          first: transactionData[0]?.transaction_date,
+          last: transactionData[transactionData.length - 1]?.transaction_date
         }
       });
     }
@@ -123,7 +123,24 @@ export async function POST(request: NextRequest) {
     console.log('🔄 [API] Parsing JSON response...');
     let analysis;
     try {
-      analysis = JSON.parse(analysisResult);
+      // Clean the response to remove any comments or invalid JSON
+      let cleanedResponse = analysisResult;
+      
+      // Remove JavaScript-style comments
+      cleanedResponse = cleanedResponse.replace(/\/\/.*$/gm, '');
+      
+      // Remove any trailing commas before closing brackets/braces
+      cleanedResponse = cleanedResponse.replace(/,(\s*[}\]])/g, '$1');
+      
+      // Try to find and extract just the JSON object
+      const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleanedResponse = jsonMatch[0];
+      }
+      
+      console.log('🧹 [API] Cleaned response length:', cleanedResponse.length);
+      
+      analysis = JSON.parse(cleanedResponse);
       console.log('✅ [API] JSON parsing successful');
       console.log('📈 [API] Analysis summary:', {
         simulatedTransactionsCount: analysis.simulatedTransactions?.length || 0,
@@ -150,7 +167,15 @@ export async function POST(request: NextRequest) {
     } catch (parseError) {
       console.error('❌ [API] JSON parsing failed:', parseError);
       console.error('📄 [API] Raw response that failed to parse:', analysisResult);
-      throw new Error(`Failed to parse OpenAI response as JSON: ${parseError}`);
+      
+      // Try to extract partial data or create fallback
+      console.log('🔄 [API] Attempting to create fallback analysis due to JSON parse error');
+      
+      // Create a basic fallback analysis
+      const fallbackTransactions = generateFallbackTransactions(transactionData, debtData);
+      analysis = createMockAnalysis(fallbackTransactions);
+      
+      console.log('✅ [API] Created fallback analysis with', fallbackTransactions.length, 'transactions');
     }
 
     const totalDuration = Date.now() - startTime;
@@ -191,12 +216,13 @@ export async function POST(request: NextRequest) {
 }
 
 interface TransactionDataInput {
-  date?: string;
+  transaction_date?: string;
+  post_date?: string;
   description?: string;
-  amount?: number;
   category?: string;
-  account?: string;
   type?: string;
+  amount?: number;
+  memo?: string;
 }
 
 interface DebtDataInput {
@@ -213,32 +239,26 @@ interface DebtDataInput {
 }
 
 function createAnalysisPrompt(transactionData: TransactionDataInput[], debtData: DebtDataInput[]): string {
-  let prompt = `Analyze the following financial data and simulate individual transactions for the next 12 months. Identify recurring patterns, seasonal variations, and predict specific transactions. Return your response as valid JSON with this exact structure:
+  let prompt = `Analyze the following financial data and simulate individual CREDIT CARD transactions for the next 12 months. 
+
+IMPORTANT: Generate ONLY credit card transactions. Do not include:
+- Salary deposits or income
+- Rent payments or mortgage payments  
+- Bank transfers or direct debits
+- Loan payments or debt payments
+
+Focus on credit card spending patterns, recurring subscriptions, and purchases. 
+
+CRITICAL: Return ONLY valid JSON. Do not include:
+- Comments (// or /* */)
+- Explanatory text before or after JSON
+- Trailing commas
+- Any text outside the JSON object
+
+Return your response as valid JSON with this exact structure:
 
 {
   "simulatedTransactions": [
-    {
-      "date": "2024-07-01",
-      "description": "Salary Deposit",
-      "amount": 4500.00,
-      "category": "Income",
-      "account": "Checking",
-      "type": "Credit",
-      "confidence": 0.95,
-      "isRecurring": true,
-      "recurringPattern": "monthly"
-    },
-    {
-      "date": "2024-07-03",
-      "description": "Rent Payment",
-      "amount": -1800.00,
-      "category": "Housing",
-      "account": "Checking",
-      "type": "Debit",
-      "confidence": 0.98,
-      "isRecurring": true,
-      "recurringPattern": "monthly"
-    },
     {
       "date": "2024-07-05",
       "description": "Grocery Store",
@@ -249,26 +269,47 @@ function createAnalysisPrompt(transactionData: TransactionDataInput[], debtData:
       "confidence": 0.75,
       "isRecurring": false,
       "recurringPattern": null
+    },
+    {
+      "date": "2024-07-08",
+      "description": "Netflix",
+      "amount": -15.99,
+      "category": "Subscriptions",
+      "account": "Credit Card",
+      "type": "Debit",
+      "confidence": 0.95,
+      "isRecurring": true,
+      "recurringPattern": "monthly"
+    },
+    {
+      "date": "2024-07-12",
+      "description": "Gas Station",
+      "amount": -45.20,
+      "category": "Transportation",
+      "account": "Credit Card",
+      "type": "Debit",
+      "confidence": 0.70,
+      "isRecurring": false,
+      "recurringPattern": null
     }
-    // ... continue for 12 months with all predicted transactions
   ],
   "patterns": {
     "recurringTransactions": [
       {
-        "description": "Salary Deposit",
-        "averageAmount": 4500.00,
+        "description": "Netflix",
+        "averageAmount": 15.99,
         "frequency": "monthly",
-        "category": "Income",
+        "category": "Subscriptions",
         "confidence": 0.95,
-        "nextOccurrence": "2024-07-01"
+        "nextOccurrence": "2024-08-08"
       },
       {
-        "description": "Rent Payment", 
-        "averageAmount": -1800.00,
-        "frequency": "monthly",
-        "category": "Housing",
-        "confidence": 0.98,
-        "nextOccurrence": "2024-07-03"
+        "description": "Grocery Store",
+        "averageAmount": 125.50,
+        "frequency": "weekly",
+        "category": "Groceries",
+        "confidence": 0.80,
+        "nextOccurrence": "2024-07-12"
       }
     ],
     "significantTransactions": [
@@ -331,7 +372,7 @@ function createAnalysisPrompt(transactionData: TransactionDataInput[], debtData:
     // Include sample transactions and detailed analysis
     prompt += `- Sample transactions:\n`;
     transactionData.slice(0, 15).forEach(t => {
-      prompt += `  ${t.date}: ${t.description} - $${t.amount} (${t.category})\n`;
+      prompt += `  ${t.transaction_date}: ${t.description} - $${t.amount} (${t.category}) [${t.type}]${t.memo ? ` - ${t.memo}` : ''}\n`;
     });
 
     // Add frequency analysis
@@ -422,7 +463,15 @@ function createAnalysisPrompt(transactionData: TransactionDataInput[], debtData:
    - Medium confidence (0.7-0.9): Regular but variable (groceries, gas, dining)
    - Low confidence (0.5-0.7): Irregular purchases, entertainment, large purchases
 
-CRITICAL: Generate AT LEAST 150-200 individual transactions covering the full 12-month period. Each month must have multiple transactions. Focus on creating a realistic spending simulation that mirrors the user's historical patterns.`;
+CRITICAL REQUIREMENTS:
+1. Generate EXACTLY 150-200 individual transactions covering the full 12-month period
+2. Each month must have 12-17 transactions
+3. Do NOT include comments like "// ... continue for 12 months"
+4. Return ONLY valid JSON - no explanatory text
+5. Ensure all JSON arrays are properly closed with commas between elements
+6. Focus on creating a realistic spending simulation that mirrors the user's historical patterns
+
+The response must be valid JSON that can be parsed by JSON.parse().`;
 
   return prompt;
 }
@@ -485,7 +534,7 @@ interface FallbackTransaction {
   recurringPattern: string | null;
 }
 
-function generateFallbackTransactions(transactionData: TransactionDataInput[], debtData: DebtDataInput[]): FallbackTransaction[] {
+function generateFallbackTransactions(_transactionData: TransactionDataInput[], debtData: DebtDataInput[]): FallbackTransaction[] {
   console.log('🔄 [Fallback] Generating fallback transactions');
   
   const transactions: FallbackTransaction[] = [];
@@ -496,40 +545,16 @@ function generateFallbackTransactions(transactionData: TransactionDataInput[], d
     const currentMonth = new Date(startDate);
     currentMonth.setMonth(startDate.getMonth() + month);
     
-    // Generate monthly salary
-    transactions.push({
-      date: `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-01`,
-      description: 'Salary Deposit',
-      amount: 4500,
-      category: 'Income',
-      account: 'Checking',
-      type: 'Credit',
-      confidence: 0.95,
-      isRecurring: true,
-      recurringPattern: 'monthly'
-    });
+    // Skip salary deposits and rent payments - only credit card transactions
     
-    // Generate monthly rent
-    transactions.push({
-      date: `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-03`,
-      description: 'Rent Payment',
-      amount: -1800,
-      category: 'Housing',
-      account: 'Checking',
-      type: 'Debit',
-      confidence: 0.98,
-      isRecurring: true,
-      recurringPattern: 'monthly'
-    });
-    
-    // Generate utilities
+    // Generate utilities (credit card autopay)
     const utilityAmount = month >= 5 && month <= 8 ? -120 : -85; // Higher in summer
     transactions.push({
       date: `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-05`,
-      description: 'Electric Bill',
+      description: 'Electric Bill Autopay',
       amount: utilityAmount,
       category: 'Utilities',
-      account: 'Checking',
+      account: 'Credit Card',
       type: 'Debit',
       confidence: 0.85,
       isRecurring: true,
@@ -545,7 +570,7 @@ function generateFallbackTransactions(transactionData: TransactionDataInput[], d
         description: 'Grocery Store',
         amount: Math.round(amount * 100) / 100,
         category: 'Groceries',
-        account: 'Checking',
+        account: 'Credit Card',
         type: 'Debit',
         confidence: 0.75,
         isRecurring: false,
@@ -587,21 +612,28 @@ function generateFallbackTransactions(transactionData: TransactionDataInput[], d
       });
     }
     
-    // Add debt payments if debt data exists
-    if (debtData && debtData.length > 0) {
-      debtData.forEach((debt, index) => {
-        if (debt.minimum_payment && debt.minimum_payment > 0) {
-          const day = 15 + index;
+    // Skip debt payments - only credit card transactions
+    
+    // Add streaming services and subscriptions
+    if (month % 1 === 0) { // Monthly subscriptions
+      const subscriptions = [
+        { name: 'Netflix', amount: -15.99, day: 8 },
+        { name: 'Spotify Premium', amount: -9.99, day: 12 },
+        { name: 'Amazon Prime', amount: -14.99, day: 15 }
+      ];
+      
+      subscriptions.forEach((sub, index) => {
+        if (index < 2 || month % 3 === 0) { // Some subscriptions are quarterly
           transactions.push({
-            date: `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
-            description: `${debt.account_type} Payment`,
-            amount: -debt.minimum_payment,
-            category: 'Debt Payment',
-            account: 'Checking',
+            date: `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(sub.day).padStart(2, '0')}`,
+            description: sub.name,
+            amount: sub.amount,
+            category: 'Subscriptions',
+            account: 'Credit Card',
             type: 'Debit',
-            confidence: 0.95,
+            confidence: 0.90,
             isRecurring: true,
-            recurringPattern: 'monthly'
+            recurringPattern: index < 2 ? 'monthly' : 'quarterly'
           });
         }
       });
@@ -619,7 +651,7 @@ function generateFallbackTransactions(transactionData: TransactionDataInput[], d
         description: descriptions[i % descriptions.length],
         amount: Math.round(amount * 100) / 100,
         category: categories[i % categories.length],
-        account: Math.random() > 0.5 ? 'Credit Card' : 'Checking',
+        account: 'Credit Card',
         type: 'Debit',
         confidence: 0.50,
         isRecurring: false,
@@ -713,12 +745,37 @@ function parseCSVLine(line: string): string[] {
   return values;
 }
 
+interface RecurringPattern {
+  description: string;
+  averageAmount: number;
+  frequency: string;
+  category: string;
+  confidence: number;
+  nextOccurrence: string;
+}
+
+interface SignificantTransaction {
+  description: string;
+  averageAmount: number;
+  frequency: string;
+  category: string;
+  lastOccurrence: string;
+  predictedNext: string;
+}
+
+interface SeasonalPattern {
+  season: string;
+  category: string;
+  averageIncrease: number;
+  reason: string;
+}
+
 interface MockAnalysis {
   simulatedTransactions: FallbackTransaction[];
   patterns: {
-    recurringTransactions: any[];
-    significantTransactions: any[];
-    seasonalPatterns: any[];
+    recurringTransactions: RecurringPattern[];
+    significantTransactions: SignificantTransaction[];
+    seasonalPatterns: SeasonalPattern[];
   };
   insights: {
     totalPredictedTransactions: number;

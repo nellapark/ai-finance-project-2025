@@ -216,7 +216,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
 
       setLlmAnalysis(analysis);
 
-      // Convert LLM analysis to graph data with cumulative balance
+      // Convert LLM analysis to graph data - plot individual transaction amounts
       console.log('📈 [Client] Converting analysis to graph data...');
       
       // Sort transactions by date first
@@ -224,15 +224,11 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
         new Date(a.date).getTime() - new Date(b.date).getTime()
       );
 
-      // Calculate cumulative balance
-      let runningBalance = 75000; // Starting balance - could be derived from data
+      // Create graph data with absolute transaction amounts
       const graphData: DataPoint[] = sortedTransactions.map(transaction => {
-        runningBalance += transaction.amount; // Add transaction amount (positive for income, negative for expenses)
-        
         return {
           time: new Date(transaction.date),
-          amount: Math.abs(transaction.amount), // Individual transaction amount
-          cumulativeBalance: runningBalance, // Running balance for line graph
+          amount: Math.abs(transaction.amount), // Use absolute value for y-axis
           originalAmount: transaction.amount, // Keep original for reference
           description: transaction.description,
           category: transaction.category,
@@ -248,11 +244,10 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
           start: graphData[0]?.time,
           end: graphData[graphData.length - 1]?.time
         },
-        balanceRange: {
-          start: graphData[0]?.cumulativeBalance,
-          end: graphData[graphData.length - 1]?.cumulativeBalance,
-          min: Math.min(...graphData.map(d => d.cumulativeBalance || 0)),
-          max: Math.max(...graphData.map(d => d.cumulativeBalance || 0))
+        amountRange: {
+          min: Math.min(...graphData.map(d => d.amount)),
+          max: Math.max(...graphData.map(d => d.amount)),
+          average: graphData.reduce((sum, d) => sum + d.amount, 0) / graphData.length
         },
         transactionTypes: {
           income: graphData.filter(d => d.type === 'Credit').length,
