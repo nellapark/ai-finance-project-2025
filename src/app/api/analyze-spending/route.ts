@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     const apiCallStart = Date.now();
     
     const completion = await openai.chat.completions.create({
-      model: "gpt-5-mini",
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
@@ -95,8 +95,7 @@ export async function POST(request: NextRequest) {
           content: prompt
         }
       ],
-      temperature: 0,
-      // max_tokens: 10000,
+      max_tokens: 10000,
     });
 
     const apiCallDuration = Date.now() - apiCallStart;

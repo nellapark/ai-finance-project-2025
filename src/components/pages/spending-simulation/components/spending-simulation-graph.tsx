@@ -24,7 +24,7 @@ interface SpendingSimulationGraphProps {
 }
 
 const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
-  data = generateSampleData(),
+  data = [],
   width = 1200,
   height = 500,
   className = '',
@@ -33,7 +33,26 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
-    if (!svgRef.current || !data.length) return;
+    console.log('🎨 [Graph] Rendering with data:', {
+      dataLength: data?.length || 0,
+      hasData: !!data,
+      isCumulative,
+      sampleData: data?.slice(0, 2)
+    });
+    
+    if (!svgRef.current || !data || !data.length) {
+      console.log('🚫 [Graph] Early return - no data or SVG ref');
+      return;
+    }
+    
+    // Filter out any invalid data points
+    const validData = data.filter(d => d && d.time && d.amount !== undefined && d.amount !== null);
+    console.log('✅ [Graph] Valid data points:', validData.length);
+    
+    if (validData.length === 0) {
+      console.log('🚫 [Graph] No valid data points to render');
+      return;
+    }
 
     // Clear previous content
     d3.select(svgRef.current).selectAll('*').remove();
@@ -52,14 +71,14 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
     // Set up scales
     const xScale = d3
       .scaleTime()
-      .domain(d3.extent(data, (d) => d.time) as [Date, Date])
+      .domain(d3.extent(validData, (d) => d.time) as [Date, Date])
       .range([0, innerWidth]);
 
     const yScale = d3
       .scaleLinear()
       .domain(isCumulative 
-        ? [0, d3.max(data, (d) => d.cumulativeBalance || d.amount) as number]
-        : [0, d3.max(data, (d) => d.amount) as number]
+        ? [0, d3.max(validData, (d) => d.cumulativeBalance || d.amount) as number]
+        : [0, d3.max(validData, (d) => d.amount) as number]
       )
       .nice()
       .range([innerHeight, 0]);
@@ -97,7 +116,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
         .curve(d3.curveMonotoneX);
 
       g.append('path')
-        .datum(data)
+        .datum(validData)
         .attr('fill', 'none')
         .attr('stroke', '#3b82f6')
         .attr('stroke-width', 3)
@@ -106,7 +125,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
 
     // Add transaction points
     g.selectAll('.transaction-point')
-      .data(data)
+      .data(validData)
       .enter()
       .append('circle')
       .attr('class', 'transaction-point')
@@ -120,7 +139,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
 
     // Add special indicators for large transactions
     g.selectAll('.large-transaction')
-      .data(data.filter(d => Math.abs(d.originalAmount || d.amount) > 500))
+      .data(validData.filter(d => Math.abs(d.originalAmount || d.amount) > 500))
       .enter()
       .append('circle')
       .attr('class', 'large-transaction')
@@ -146,17 +165,18 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .style('z-index', '1000');
 
     g.selectAll('.transaction-point')
-      .on('mouseover', function(event, d: DataPoint) {
+      .on('mouseover', function(event, d) {
+        const dataPoint = d as DataPoint;
         tooltip.style('visibility', 'visible')
           .html(`
-            <strong>${d.description || 'Transaction'}</strong><br/>
-            ${isCumulative ? `Cumulative Total: $${(d.cumulativeBalance || d.amount).toLocaleString()}<br/>` : ''}
-            Amount: $${d.amount.toLocaleString()}<br/>
-            Original: $${(d.originalAmount || 0).toFixed(2)}<br/>
-            Category: ${d.category || 'N/A'}<br/>
-            Date: ${d.time.toLocaleDateString()}<br/>
-            ${d.isRecurring ? `Recurring: Yes` : ''}<br/>
-            ${d.confidence ? `Confidence: ${(d.confidence * 100).toFixed(0)}%` : ''}
+            <strong>${dataPoint.description || 'Transaction'}</strong><br/>
+            ${isCumulative ? `Cumulative Total: $${(dataPoint.cumulativeBalance || dataPoint.amount).toLocaleString()}<br/>` : ''}
+            Amount: $${dataPoint.amount.toLocaleString()}<br/>
+            Original: $${(dataPoint.originalAmount || 0).toFixed(2)}<br/>
+            Category: ${dataPoint.category || 'N/A'}<br/>
+            Date: ${dataPoint.time.toLocaleDateString()}<br/>
+            ${dataPoint.isRecurring ? `Recurring: Yes` : ''}<br/>
+            ${dataPoint.confidence ? `Confidence: ${(dataPoint.confidence * 100).toFixed(0)}%` : ''}
           `);
         
         d3.select(this)
@@ -167,7 +187,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
         tooltip.style('top', (event.pageY - 10) + 'px')
           .style('left', (event.pageX + 10) + 'px');
       })
-      .on('mouseout', function(event, d) {
+      .on('mouseout', function() {
         tooltip.style('visibility', 'hidden');
         
         d3.select(this)
@@ -277,27 +297,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
   );
 };
 
-// Generate sample data for demonstration
-function generateSampleData(): DataPoint[] {
-  const data: DataPoint[] = [];
-  const startDate = new Date(2024, 0, 1); // January 1, 2024
-  const baseAmount = 50000;
 
-  for (let i = 0; i < 12; i++) {
-    const date = new Date(startDate);
-    date.setMonth(date.getMonth() + i);
-    
-    // Simulate spending pattern with some randomness
-    const monthlySpending = baseAmount - (i * 3000) + (Math.random() - 0.5) * 5000;
-    
-    data.push({
-      time: date,
-      amount: Math.max(0, monthlySpending), // Ensure non-negative values
-    });
-  }
-
-  return data;
-}
 
 export default SpendingSimulationGraph;
 export type { DataPoint, SpendingSimulationGraphProps };

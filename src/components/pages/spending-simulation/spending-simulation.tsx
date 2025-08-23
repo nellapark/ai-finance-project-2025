@@ -86,12 +86,108 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
   const [llmAnalysis, setLlmAnalysis] = useState<LLMAnalysis | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [isCumulative, setIsCumulative] = useState(true);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [animatedData, setAnimatedData] = useState<DataPoint[]>([]);
+  const [fullData, setFullData] = useState<DataPoint[]>([]);
+  const [animationSpeed] = useState(50);
+  const [isPaused, setIsPaused] = useState(false);
   
   // Testing mode constant - set to true to use existing CSV files
   const isTesting = true;
 
   const handleConnectBanks = () => {
     setIsModalOpen(true);
+  };
+
+  const animateTransactions = (transactions: DataPoint[]) => {
+    console.log('🎬 [Animation] Starting animation with', transactions?.length || 0, 'transactions');
+    
+    if (!transactions || transactions.length === 0) {
+      console.warn('🚫 [Animation] No transactions to animate');
+      return;
+    }
+    
+    // Filter out any invalid transactions
+    const validTransactions = transactions.filter(t => t && t.time && t.amount !== undefined);
+    console.log('✅ [Animation] Valid transactions:', validTransactions.length, 'out of', transactions.length);
+    
+    if (validTransactions.length === 0) {
+      console.warn('🚫 [Animation] No valid transactions to animate');
+      return;
+    }
+    
+    console.log('🎯 [Animation] Setting up animation state');
+    setIsAnimating(true);
+    setIsPaused(false);
+    setAnimatedData([]);
+    setFullData(validTransactions);
+    
+    let currentIndex = 0;
+    let timeoutId: NodeJS.Timeout;
+    
+    const addNextTransaction = () => {
+      if (isPaused) {
+        timeoutId = setTimeout(addNextTransaction, 100);
+        return;
+      }
+      
+      if (currentIndex < validTransactions.length) {
+        console.log('➕ [Animation] Adding transaction', currentIndex + 1, 'of', validTransactions.length);
+        setAnimatedData(prev => [...prev, validTransactions[currentIndex]]);
+        currentIndex++;
+        timeoutId = setTimeout(addNextTransaction, animationSpeed);
+      } else {
+        console.log('🏁 [Animation] Animation completed');
+        setIsAnimating(false);
+        setIsPaused(false);
+      }
+    };
+    
+    // Start the animation
+    timeoutId = setTimeout(addNextTransaction, 100);
+    
+    // Return cleanup function
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  };
+
+  const handleGenerateTestData = () => {
+    console.log('🧪 [Test] Generating test data directly');
+    const testData: DataPoint[] = [];
+    let cumulativeTotal = 0;
+    
+    for (let i = 0; i < 20; i++) {
+      const amount = Math.random() * 500 + 50;
+      cumulativeTotal += amount;
+      
+      testData.push({
+        time: new Date(2024, 0, i + 1),
+        amount: amount,
+        cumulativeBalance: cumulativeTotal,
+        originalAmount: -amount,
+        description: `Test Transaction ${i + 1}`,
+        category: 'Test',
+        confidence: 0.8,
+        isRecurring: false,
+        type: 'Debit'
+      });
+    }
+    
+    setHasConnectedData(true);
+    animateTransactions(testData);
+  };
+
+  const togglePause = () => {
+    setIsPaused(!isPaused);
+  };
+
+  const skipToEnd = () => {
+    if (fullData.length > 0) {
+      setAnimatedData(fullData);
+      setIsAnimating(false);
+      setIsPaused(false);
+    }
   };
 
   const handleTestingMode = async () => {
@@ -227,21 +323,23 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
 
       // Create graph data with both individual and cumulative amounts
       let cumulativeTotal = 0; // Start from 0
-      const graphData: DataPoint[] = sortedTransactions.map(transaction => {
-        cumulativeTotal += Math.abs(transaction.amount); // Add absolute value of transaction amount
-        
-        return {
-          time: new Date(transaction.date),
-          amount: Math.abs(transaction.amount), // Individual transaction amount (absolute value)
-          cumulativeBalance: cumulativeTotal, // Running total of absolute amounts
-          originalAmount: transaction.amount, // Keep original for reference
-          description: transaction.description,
-          category: transaction.category,
-          confidence: transaction.confidence,
-          isRecurring: transaction.isRecurring,
-          type: transaction.type
-        };
-      });
+      const graphData: DataPoint[] = sortedTransactions
+        .filter(transaction => transaction && transaction.date && transaction.amount !== undefined)
+        .map(transaction => {
+          cumulativeTotal += Math.abs(transaction.amount); // Add absolute value of transaction amount
+          
+          return {
+            time: new Date(transaction.date),
+            amount: Math.abs(transaction.amount), // Individual transaction amount (absolute value)
+            cumulativeBalance: cumulativeTotal, // Running total of absolute amounts
+            originalAmount: transaction.amount, // Keep original for reference
+            description: transaction.description || 'Transaction',
+            category: transaction.category || 'Uncategorized',
+            confidence: transaction.confidence || 0,
+            isRecurring: transaction.isRecurring || false,
+            type: transaction.type || 'Debit'
+          };
+        });
 
       console.log('📊 [Client] Graph data created:', {
         dataPoints: graphData.length,
@@ -265,7 +363,10 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
         }
       });
 
-      setGraphData(graphData);
+      // Start the animation instead of setting graph data directly
+      console.log('🎬 [Client] About to start animation with', graphData.length, 'transactions');
+      setGraphData([]); // Clear existing data
+      animateTransactions(graphData);
 
       const totalDuration = Date.now() - startTime;
       console.log('🎉 [Client] LLM analysis completed successfully in', totalDuration, 'ms');
@@ -282,25 +383,32 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
     }
   };
 
-  const generateFallbackData = (transactionFile: File | null, debtFile: File | null) => {
+  const generateFallbackData = (transactionFile: File | null, _debtFile: File | null) => {
     // Fallback to simple data generation if LLM fails
     const data: DataPoint[] = [];
     const startDate = new Date(2024, 0, 1);
-    const baseAmount = 75000;
+    let cumulativeTotal = 0;
 
     for (let i = 0; i < 12; i++) {
       const date = new Date(startDate);
       date.setMonth(date.getMonth() + i);
       
       const monthlySpending = transactionFile ? 
-        baseAmount - (i * 4500) + (Math.random() - 0.5) * 8000 :
-        baseAmount - (i * 3000) + (Math.random() - 0.5) * 5000;
+        Math.random() * 2000 + 500 :
+        Math.random() * 1500 + 300;
       
-      const debtPayments = debtFile ? Math.random() * 2000 : 0;
+      cumulativeTotal += monthlySpending;
       
       data.push({
         time: date,
-        amount: Math.max(0, monthlySpending - debtPayments),
+        amount: monthlySpending,
+        cumulativeBalance: cumulativeTotal,
+        originalAmount: -monthlySpending,
+        description: `Monthly Spending ${i + 1}`,
+        category: 'General',
+        confidence: 0.5,
+        isRecurring: false,
+        type: 'Debit'
       });
     }
 
@@ -320,6 +428,8 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
               <p className="text-gray-600 text-lg">
                 {isAnalyzing
                   ? 'Analyzing your financial data with AI...'
+                  : isAnimating
+                  ? `Simulating transactions in real-time... (${animatedData.length}/${fullData.length})`
                   : hasConnectedData 
                   ? 'Your personalized spending analysis based on your financial data.'
                   : 'Connect your financial data to get personalized spending insights and projections.'
@@ -336,6 +446,16 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
                 {isAnalyzing ? 'Loading...' : 'Test Mode'}
+              </button>
+              <button
+                onClick={handleGenerateTestData}
+                disabled={isAnalyzing}
+                className="inline-flex items-center px-4 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Quick Test
               </button>
               <button
                 onClick={handleConnectBanks}
@@ -358,7 +478,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
                 </div>
-                <div className="ml-3">
+                <div className="ml-3 flex-1">
                   <p className="text-sm font-medium text-green-800">
                     Data Connected Successfully
                   </p>
@@ -367,6 +487,20 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                     {uploadedFiles.transactions && uploadedFiles.debt && ' • '}
                     {uploadedFiles.debt && `Debt data: ${uploadedFiles.debt.name}`}
                   </p>
+                  {isAnimating && (
+                    <div className="mt-2">
+                      <div className="flex justify-between text-xs text-green-600 mb-1">
+                        <span>Processing transactions...</span>
+                        <span>{animatedData.length}/{fullData.length}</span>
+                      </div>
+                      <div className="w-full bg-green-200 rounded-full h-2">
+                        <div 
+                          className="bg-green-600 h-2 rounded-full transition-all duration-100"
+                          style={{ width: `${(animatedData.length / fullData.length) * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -392,8 +526,8 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
 
         {/* Main Content */}
         <main className="space-y-8">
-          {isAnalyzing ? (
-            /* Loading State */
+          {isAnalyzing && !hasConnectedData ? (
+            /* Loading State - only show when no data is connected yet */
             <section className="text-center py-12">
               <div className="max-w-md mx-auto">
                 <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
@@ -409,35 +543,80 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
             <>
               {/* Graph Section */}
               <section className="bg-gray-50 rounded-lg p-6">
-                <div className="flex justify-between items-center mb-4">
+                                <div className="flex justify-between items-center mb-4">
                   <h2 className="text-xl font-semibold text-gray-800">
-                    Your Spending Projection
-                  </h2>
-                  <div className="flex items-center space-x-3">
-                    <span className="text-sm text-gray-600">Individual</span>
-                    <button
-                      onClick={() => setIsCumulative(!isCumulative)}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                        isCumulative ? 'bg-blue-600' : 'bg-gray-200'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          isCumulative ? 'translate-x-6' : 'translate-x-1'
+                  Your Spending Projection
+                </h2>
+                  <div className="flex items-center space-x-6">
+                    {/* Animation Controls */}
+                    {(isAnimating || fullData.length > 0) && (
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={togglePause}
+                          disabled={!isAnimating}
+                          className="p-1 rounded-full bg-blue-100 hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isPaused ? (
+                            <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                            </svg>
+                          ) : (
+                            <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </button>
+                        <button
+                          onClick={skipToEnd}
+                          disabled={!isAnimating}
+                          className="px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 text-blue-600 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Skip
+                        </button>
+                      </div>
+                    )}
+                    
+                    {/* View Toggle */}
+                    <div className="flex items-center space-x-3">
+                      <span className="text-sm text-gray-600">Individual</span>
+                      <button
+                        onClick={() => setIsCumulative(!isCumulative)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                          isCumulative ? 'bg-blue-600' : 'bg-gray-200'
                         }`}
-                      />
-                    </button>
-                    <span className="text-sm text-gray-600">Cumulative</span>
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            isCumulative ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                      <span className="text-sm text-gray-600">Cumulative</span>
+                    </div>
                   </div>
                 </div>
                 <div className="w-full overflow-x-auto">
-                  <SpendingSimulationGraph
-                    data={graphData}
-                    width={1200}
-                    height={500}
-                    className="w-full min-w-full"
-                    isCumulative={isCumulative}
-                  />
+                  {(() => {
+                    const currentData = isAnimating ? animatedData : (fullData.length > 0 ? fullData : graphData);
+                    console.log('📊 [Main] Passing data to graph:', {
+                      isAnimating,
+                      animatedDataLength: animatedData.length,
+                      fullDataLength: fullData.length,
+                      graphDataLength: graphData.length,
+                      currentDataLength: currentData.length,
+                      isCumulative,
+                      sampleCurrentData: currentData.slice(0, 2)
+                    });
+                    return (
+                      <SpendingSimulationGraph
+                        data={currentData}
+                        width={1200}
+                        height={500}
+                        className="w-full min-w-full"
+                        isCumulative={isCumulative}
+                      />
+                    );
+                  })()}
                 </div>
               </section>
 
@@ -449,9 +628,11 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
                   <div className="text-center p-4 bg-blue-50 rounded-lg">
                     <div className="text-2xl font-bold text-blue-600 mb-1">
-                      {llmAnalysis?.insights.totalPredictedTransactions || graphData.length}
+                      {isAnimating ? animatedData.length : (llmAnalysis?.insights.totalPredictedTransactions || fullData.length || graphData.length)}
                     </div>
-                    <div className="text-sm text-blue-800">Predicted Transactions</div>
+                    <div className="text-sm text-blue-800">
+                      {isAnimating ? 'Processed Transactions' : 'Predicted Transactions'}
+                    </div>
                   </div>
                   <div className="text-center p-4 bg-green-50 rounded-lg">
                     <div className="text-2xl font-bold text-green-600 mb-1">
@@ -681,15 +862,15 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                     </svg>
                     Try Test Mode
                   </button>
-                  <button
-                    onClick={handleConnectBanks}
-                    className="inline-flex items-center px-8 py-4 bg-blue-600 text-white font-medium text-lg rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-                  >
-                    <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    Connect Your Banks
-                  </button>
+                <button
+                  onClick={handleConnectBanks}
+                  className="inline-flex items-center px-8 py-4 bg-blue-600 text-white font-medium text-lg rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+                >
+                  <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  Connect Your Banks
+                </button>
                 </div>
                 
                 <p className="mt-4 text-sm text-gray-500">
