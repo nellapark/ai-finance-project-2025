@@ -91,12 +91,62 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
   const [fullData, setFullData] = useState<DataPoint[]>([]);
   const [animationSpeed] = useState(50);
   const [isPaused, setIsPaused] = useState(false);
-  
-  // Testing mode constant - set to true to use existing CSV files
-  const isTesting = true;
+  const [showRecurringOnly, setShowRecurringOnly] = useState(false);
+  const [showOneTimeOnly, setShowOneTimeOnly] = useState(false);
 
   const handleConnectBanks = () => {
     setIsModalOpen(true);
+  };
+
+  // Function to identify recurring transactions based on patterns
+  const identifyRecurringTransactions = (transactions: any[]): any[] => {
+    console.log('🔍 [Analysis] Identifying recurring transaction patterns...');
+    
+    // Group transactions by similar descriptions and amounts
+    const transactionGroups: { [key: string]: any[] } = {};
+    
+    transactions.forEach(transaction => {
+      // Create a key based on description and approximate amount (rounded to nearest $5)
+      const description = transaction.description?.toLowerCase().replace(/\d+/g, '').trim() || 'unknown';
+      const roundedAmount = Math.round(Math.abs(transaction.amount) / 5) * 5;
+      const key = `${description}_${roundedAmount}`;
+      
+      if (!transactionGroups[key]) {
+        transactionGroups[key] = [];
+      }
+      transactionGroups[key].push(transaction);
+    });
+    
+    // Identify groups with multiple occurrences as potentially recurring
+    const recurringPatterns: { [key: string]: boolean } = {};
+    Object.entries(transactionGroups).forEach(([key, group]) => {
+      if (group.length >= 2) { // At least 2 occurrences
+        // Check if transactions are spread over time (not all on same day)
+        const dates = group.map(t => new Date(t.date).getTime());
+        const minDate = Math.min(...dates);
+        const maxDate = Math.max(...dates);
+        const daysDifference = (maxDate - minDate) / (1000 * 60 * 60 * 24);
+        
+        if (daysDifference >= 7) { // At least a week apart
+          recurringPatterns[key] = true;
+          console.log(`🔄 [Analysis] Found recurring pattern: ${key} (${group.length} occurrences over ${daysDifference.toFixed(0)} days)`);
+        }
+      }
+    });
+    
+    // Mark transactions as recurring based on identified patterns
+    return transactions.map(transaction => {
+      const description = transaction.description?.toLowerCase().replace(/\d+/g, '').trim() || 'unknown';
+      const roundedAmount = Math.round(Math.abs(transaction.amount) / 5) * 5;
+      const key = `${description}_${roundedAmount}`;
+      
+      return {
+        ...transaction,
+        isRecurring: recurringPatterns[key] || transaction.isRecurring || false,
+        recurringPattern: recurringPatterns[key] ? 'detected' : transaction.recurringPattern,
+        recurringGroup: recurringPatterns[key] ? key : (transaction.isRecurring ? key : undefined)
+      };
+    });
   };
 
   const animateTransactions = (transactions: DataPoint[]) => {
@@ -164,10 +214,28 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
       let category: string;
       
       if (i < 25) {
-        // Regular small transactions
-        amount = Math.random() * 20 + 5; // $5-$25
-        description = ['Coffee Shop', 'Lunch', 'Gas Station', 'Grocery Store', 'Parking'][Math.floor(Math.random() * 5)];
-        category = ['Food & Dining', 'Transportation', 'Groceries'][Math.floor(Math.random() * 3)];
+        // Create some recurring patterns and some one-time transactions
+        if (i % 7 === 0) {
+          // Weekly recurring - Coffee
+          amount = 4.50 + Math.random() * 2; // $4.50-$6.50
+          description = 'Starbucks';
+          category = 'Food & Dining';
+        } else if (i % 14 === 0) {
+          // Bi-weekly recurring - Gas
+          amount = 45 + Math.random() * 15; // $45-$60
+          description = 'Shell Gas Station';
+          category = 'Transportation';
+        } else if (i % 10 === 0) {
+          // Recurring subscription
+          amount = 15.99;
+          description = 'Netflix Subscription';
+          category = 'Entertainment';
+        } else {
+          // One-time transactions
+          amount = Math.random() * 20 + 5; // $5-$25
+          description = ['Local Restaurant', 'Parking Meter', 'Convenience Store', 'Food Truck'][Math.floor(Math.random() * 4)];
+          category = ['Food & Dining', 'Transportation', 'Shopping'][Math.floor(Math.random() * 3)];
+        }
       } else {
         // Statistical outliers (much larger than typical)
         amount = Math.random() * 200 + 150; // $150-$350 (outliers for this dataset)
@@ -177,6 +245,14 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
       
       cumulativeTotal += amount;
       
+      // Generate recurring group identifier for recurring transactions
+      let recurringGroup: string | undefined;
+      if ((i % 7 === 0 || i % 14 === 0 || i % 10 === 0) && i < 25) {
+        const cleanDescription = description.toLowerCase().replace(/\d+/g, '').trim();
+        const roundedAmount = Math.round(amount / 5) * 5;
+        recurringGroup = `${cleanDescription}_${roundedAmount}`;
+      }
+
       testData.push({
         time: new Date(2024, 0, i + 1),
         amount: amount,
@@ -185,8 +261,9 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
         description: `${description} ${i + 1}`,
         category: category,
         confidence: i < 25 ? 0.8 : 0.6, // Lower confidence for outliers
-        isRecurring: i < 25 && Math.random() > 0.7, // Some regular transactions are recurring
-        type: 'Debit'
+        isRecurring: (i % 7 === 0 || i % 14 === 0 || i % 10 === 0) && i < 25, // Mark known recurring patterns
+        type: 'Debit',
+        recurringGroup: recurringGroup
       });
     }
     
@@ -213,13 +290,24 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
     }
   };
 
+  // Filter data based on recurring transaction preferences
+  const getFilteredData = (data: DataPoint[]) => {
+    if (showRecurringOnly) {
+      return data.filter(d => d.isRecurring);
+    }
+    if (showOneTimeOnly) {
+      return data.filter(d => !d.isRecurring);
+    }
+    return data; // Show all transactions
+  };
+
   const handleTestingMode = async () => {
     setHasConnectedData(true);
     setIsAnalyzing(true);
     setAnalysisError(null);
     
     try {
-      await analyzeDataWithLLM(null, null, isTesting);
+      await analyzeDataWithLLM(null, null, true); // Always use testing mode for test button
     } catch (error) {
       console.error('Error in testing mode:', error);
       setAnalysisError('Failed to load testing data. Please try again.');
@@ -229,6 +317,19 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
   };
 
   const handleDataUploaded = async (transactionFile: File | null, debtFile: File | null) => {
+    console.log('📁 [Upload] Processing uploaded files:', {
+      transactionFile: transactionFile ? {
+        name: transactionFile.name,
+        size: transactionFile.size,
+        type: transactionFile.type
+      } : null,
+      debtFile: debtFile ? {
+        name: debtFile.name,
+        size: debtFile.size,
+        type: debtFile.type
+      } : null
+    });
+
     setUploadedFiles({
       transactions: transactionFile,
       debt: debtFile,
@@ -239,9 +340,10 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
     setAnalysisError(null);
     
     try {
-      await analyzeDataWithLLM(transactionFile, debtFile, isTesting);
+      console.log('🔄 [Upload] Starting analysis with uploaded data (testing mode: false)');
+      await analyzeDataWithLLM(transactionFile, debtFile, false); // Always use real data when uploading files
     } catch (error) {
-      console.error('Error analyzing data:', error);
+      console.error('❌ [Upload] Error analyzing uploaded data:', error);
       setAnalysisError('Failed to analyze your financial data. Please try again.');
       // Fall back to simple data generation
       generateFallbackData(transactionFile, debtFile);
@@ -252,7 +354,13 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
 
   const analyzeDataWithLLM = async (transactionFile: File | null, debtFile: File | null, testingMode: boolean = false) => {
     const startTime = Date.now();
-    console.log('🚀 [Client] Starting LLM analysis...');
+    console.log('🚀 [Client] Starting LLM analysis...', {
+      testingMode,
+      hasTransactionFile: !!transactionFile,
+      hasDebtFile: !!debtFile,
+      transactionFileName: transactionFile?.name,
+      debtFileName: debtFile?.name
+    });
     
     let transactionData: TransactionData[] = [];
     let debtData: DebtData[] = [];
@@ -269,8 +377,18 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
         transactionData = await parseTransactionCSV(transactionFile);
         console.log('✅ [Client] Transaction parsing completed:', {
           recordCount: transactionData.length,
-          sampleRecord: transactionData[0]
+          sampleRecord: transactionData[0],
+          dateRange: transactionData.length > 0 ? {
+            first: transactionData[0]?.transaction_date,
+            last: transactionData[transactionData.length - 1]?.transaction_date
+          } : null,
+          totalAmount: transactionData.reduce((sum, t) => sum + t.amount, 0).toFixed(2),
+          categories: [...new Set(transactionData.map(t => t.category))].slice(0, 5)
         });
+        
+        if (transactionData.length === 0) {
+          throw new Error('No valid transactions found in the uploaded file. Please check the file format.');
+        }
       }
       
       if (debtFile) {
@@ -282,7 +400,10 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
         debtData = await parseDebtCSV(debtFile);
         console.log('✅ [Client] Debt parsing completed:', {
           recordCount: debtData.length,
-          sampleRecord: debtData[0]
+          sampleRecord: debtData[0],
+          totalDebt: debtData.reduce((sum, d) => sum + d.current_balance, 0).toFixed(2),
+          totalMinPayments: debtData.reduce((sum, d) => sum + d.minimum_payment, 0).toFixed(2),
+          accountTypes: [...new Set(debtData.map(d => d.account_type))]
         });
       }
 
@@ -344,9 +465,12 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
         new Date(a.date).getTime() - new Date(b.date).getTime()
       );
 
+      // Identify recurring patterns in the transactions
+      const transactionsWithRecurringAnalysis = identifyRecurringTransactions(sortedTransactions);
+
       // Create graph data with both individual and cumulative amounts
       let cumulativeTotal = 0; // Start from 0
-      const graphData: DataPoint[] = sortedTransactions
+      const graphData: DataPoint[] = transactionsWithRecurringAnalysis
         .filter(transaction => transaction && transaction.date && transaction.amount !== undefined)
         .map(transaction => {
           cumulativeTotal += Math.abs(transaction.amount); // Add absolute value of transaction amount
@@ -360,7 +484,8 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
             category: transaction.category || 'Uncategorized',
             confidence: transaction.confidence || 0,
             isRecurring: transaction.isRecurring || false,
-            type: transaction.type || 'Debit'
+            type: transaction.type || 'Debit',
+            recurringGroup: transaction.recurringGroup
           };
         });
 
@@ -600,38 +725,72 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                     )}
                     
                     {/* View Toggle */}
-                    <div className="flex items-center space-x-3">
-                      <span className="text-sm text-gray-600">Individual</span>
-                      <button
-                        onClick={() => setIsCumulative(!isCumulative)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                          isCumulative ? 'bg-blue-600' : 'bg-gray-200'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            isCumulative ? 'translate-x-6' : 'translate-x-1'
+                    <div className="flex items-center space-x-6">
+                      <div className="flex items-center space-x-3">
+                        <span className="text-sm text-gray-600">Individual</span>
+                        <button
+                          onClick={() => setIsCumulative(!isCumulative)}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                            isCumulative ? 'bg-blue-600' : 'bg-gray-200'
                           }`}
-                        />
-                      </button>
-                      <span className="text-sm text-gray-600">Cumulative</span>
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              isCumulative ? 'translate-x-6' : 'translate-x-1'
+                            }`}
+                          />
+                        </button>
+                        <span className="text-sm text-gray-600">Cumulative</span>
+                      </div>
+                      
+                      <div className="flex items-center space-x-4">
+                        <span className="text-sm text-gray-600 font-medium">Filter:</span>
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={showRecurringOnly}
+                            onChange={(e) => {
+                              setShowRecurringOnly(e.target.checked);
+                              if (e.target.checked) setShowOneTimeOnly(false);
+                            }}
+                            className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                          />
+                          <span className="text-sm text-green-700">Recurring Only</span>
+                        </label>
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={showOneTimeOnly}
+                            onChange={(e) => {
+                              setShowOneTimeOnly(e.target.checked);
+                              if (e.target.checked) setShowRecurringOnly(false);
+                            }}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-blue-700">One-time Only</span>
+                        </label>
+                      </div>
                     </div>
                   </div>
                 </div>
                 <div className="w-full overflow-x-auto">
                   {(() => {
-                    const currentData = isAnimating ? animatedData : (fullData.length > 0 ? fullData : graphData);
+                    const baseData = isAnimating ? animatedData : (fullData.length > 0 ? fullData : graphData);
+                    const currentData = getFilteredData(baseData);
                     console.log('📊 [Main] Passing data to graph:', {
                       isAnimating,
                       animatedDataLength: animatedData.length,
                       fullDataLength: fullData.length,
                       graphDataLength: graphData.length,
-                      currentDataLength: currentData.length,
+                      baseDataLength: baseData.length,
+                      filteredDataLength: currentData.length,
                       isCumulative,
+                      showRecurringOnly,
+                      showOneTimeOnly,
                       sampleCurrentData: currentData.slice(0, 2)
                     });
                     return (
-                      <SpendingSimulationGraph
+                  <SpendingSimulationGraph
                         data={currentData}
                         width={1200}
                         height={500}

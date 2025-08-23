@@ -13,6 +13,7 @@ interface DataPoint {
   confidence?: number;
   isRecurring?: boolean;
   type?: string;
+  recurringGroup?: string; // Identifier for grouping related recurring transactions
 }
 
 interface SpendingSimulationGraphProps {
@@ -123,7 +124,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
         .attr('d', line);
     }
 
-    // Add transaction points
+    // Add transaction points with different styles for recurring vs one-time
     g.selectAll('.transaction-point')
       .data(validData)
       .enter()
@@ -132,10 +133,11 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .attr('cx', (d) => xScale(d.time))
       .attr('cy', (d) => isCumulative ? yScale(d.cumulativeBalance || d.amount) : yScale(d.amount))
       .attr('r', 4)
-      .attr('fill', '#3b82f6')
+      .attr('fill', (d) => d.isRecurring ? '#10b981' : '#3b82f6') // Green for recurring, blue for one-time
       .attr('stroke', '#ffffff')
       .attr('stroke-width', 2)
-      .style('cursor', 'pointer');
+      .style('cursor', 'pointer')
+      .style('opacity', (d) => d.isRecurring ? 0.9 : 0.7); // Slightly more opaque for recurring
 
     // Calculate statistical significance for large transactions
     const amounts = validData.map(d => Math.abs(d.originalAmount || d.amount));
@@ -158,6 +160,21 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
     const minimumThreshold = mean * 1.5; // At least 50% above mean
     const largeTransactionThreshold = Math.max(statisticalThreshold, minimumThreshold);
     
+    // Calculate recurring transaction statistics
+    const recurringTransactions = validData.filter(d => d.isRecurring);
+    const oneTimeTransactions = validData.filter(d => !d.isRecurring);
+    
+    // Analyze recurring groups
+    const recurringGroups: { [key: string]: DataPoint[] } = {};
+    recurringTransactions.forEach(transaction => {
+      if (transaction.recurringGroup) {
+        if (!recurringGroups[transaction.recurringGroup]) {
+          recurringGroups[transaction.recurringGroup] = [];
+        }
+        recurringGroups[transaction.recurringGroup].push(transaction);
+      }
+    });
+
     console.log('📊 [Graph] Transaction statistics:', {
       totalTransactions: amounts.length,
       mean: mean.toFixed(2),
@@ -166,7 +183,16 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       minimumThreshold: minimumThreshold.toFixed(2),
       finalThreshold: largeTransactionThreshold.toFixed(2),
       largeTransactionCount: amounts.filter(amount => amount > largeTransactionThreshold).length,
-      percentageOutliers: ((amounts.filter(amount => amount > largeTransactionThreshold).length / amounts.length) * 100).toFixed(1) + '%'
+      percentageOutliers: ((amounts.filter(amount => amount > largeTransactionThreshold).length / amounts.length) * 100).toFixed(1) + '%',
+      recurringCount: recurringTransactions.length,
+      oneTimeCount: oneTimeTransactions.length,
+      percentageRecurring: ((recurringTransactions.length / validData.length) * 100).toFixed(1) + '%',
+      recurringGroups: Object.keys(recurringGroups).length,
+      recurringGroupDetails: Object.entries(recurringGroups).map(([group, transactions]) => ({
+        group,
+        count: transactions.length,
+        avgAmount: (transactions.reduce((sum, t) => sum + t.amount, 0) / transactions.length).toFixed(2)
+      }))
     });
 
     // Add special indicators for statistically large transactions
@@ -199,21 +225,75 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
     g.selectAll('.transaction-point')
       .on('mouseover', function(event, d) {
         const dataPoint = d as DataPoint;
-        tooltip.style('visibility', 'visible')
-          .html(`
-            <strong>${dataPoint.description || 'Transaction'}</strong><br/>
-            ${isCumulative ? `Cumulative Total: $${(dataPoint.cumulativeBalance || dataPoint.amount).toLocaleString()}<br/>` : ''}
-            Amount: $${dataPoint.amount.toLocaleString()}<br/>
-            Original: $${(dataPoint.originalAmount || 0).toFixed(2)}<br/>
-            Category: ${dataPoint.category || 'N/A'}<br/>
-            Date: ${dataPoint.time.toLocaleDateString()}<br/>
-            ${dataPoint.isRecurring ? `Recurring: Yes` : ''}<br/>
-            ${dataPoint.confidence ? `Confidence: ${(dataPoint.confidence * 100).toFixed(0)}%` : ''}
-          `);
         
-        d3.select(this)
-          .attr('r', 6)
-          .attr('stroke-width', 3);
+        // Highlight all transactions in the same recurring group
+        if (dataPoint.isRecurring && dataPoint.recurringGroup) {
+          g.selectAll('.transaction-point')
+            .style('opacity', (pointData: any) => {
+              const point = pointData as DataPoint;
+              return point.recurringGroup === dataPoint.recurringGroup ? 1.0 : 0.3;
+            })
+            .attr('stroke-width', (pointData: any) => {
+              const point = pointData as DataPoint;
+              return point.recurringGroup === dataPoint.recurringGroup ? 3 : 2;
+            })
+            .attr('r', (pointData: any) => {
+              const point = pointData as DataPoint;
+              return point.recurringGroup === dataPoint.recurringGroup ? 6 : 4;
+            });
+          
+          // Draw connecting lines between related recurring transactions
+          const relatedTransactions = validData
+            .filter(t => t.recurringGroup === dataPoint.recurringGroup)
+            .sort((a, b) => a.time.getTime() - b.time.getTime());
+          
+          if (relatedTransactions.length > 1) {
+            // Create a line connecting all related transactions
+            const lineGenerator = d3.line<DataPoint>()
+              .x(d => xScale(d.time))
+              .y(d => isCumulative ? yScale(d.cumulativeBalance || d.amount) : yScale(d.amount))
+              .curve(d3.curveLinear);
+            
+            g.append('path')
+              .datum(relatedTransactions)
+              .attr('class', 'recurring-connection-line')
+              .attr('fill', 'none')
+              .attr('stroke', '#10b981')
+              .attr('stroke-width', 2)
+              .attr('stroke-dasharray', '5,5')
+              .attr('opacity', 0.8)
+              .attr('d', lineGenerator);
+          }
+          
+          tooltip.style('visibility', 'visible')
+            .html(`
+              <strong>${dataPoint.description || 'Transaction'}</strong><br/>
+              ${isCumulative ? `Cumulative Total: $${(dataPoint.cumulativeBalance || dataPoint.amount).toLocaleString()}<br/>` : ''}
+              Amount: $${dataPoint.amount.toLocaleString()}<br/>
+              Original: $${(dataPoint.originalAmount || 0).toFixed(2)}<br/>
+              Category: ${dataPoint.category || 'N/A'}<br/>
+              Date: ${dataPoint.time.toLocaleDateString()}<br/>
+              <strong>Recurring Pattern: ${relatedTransactions.length} occurrences</strong><br/>
+              ${dataPoint.confidence ? `Confidence: ${(dataPoint.confidence * 100).toFixed(0)}%` : ''}
+            `);
+        } else {
+          // Non-recurring transaction - just highlight this one
+          d3.select(this)
+            .attr('r', 6)
+            .attr('stroke-width', 3);
+          
+          tooltip.style('visibility', 'visible')
+            .html(`
+              <strong>${dataPoint.description || 'Transaction'}</strong><br/>
+              ${isCumulative ? `Cumulative Total: $${(dataPoint.cumulativeBalance || dataPoint.amount).toLocaleString()}<br/>` : ''}
+              Amount: $${dataPoint.amount.toLocaleString()}<br/>
+              Original: $${(dataPoint.originalAmount || 0).toFixed(2)}<br/>
+              Category: ${dataPoint.category || 'N/A'}<br/>
+              Date: ${dataPoint.time.toLocaleDateString()}<br/>
+              ${dataPoint.isRecurring ? `Recurring: Yes` : 'One-time Transaction'}<br/>
+              ${dataPoint.confidence ? `Confidence: ${(dataPoint.confidence * 100).toFixed(0)}%` : ''}
+            `);
+        }
       })
       .on('mousemove', function(event) {
         tooltip.style('top', (event.pageY - 10) + 'px')
@@ -222,9 +302,17 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .on('mouseout', function() {
         tooltip.style('visibility', 'hidden');
         
-        d3.select(this)
+        // Reset all transaction points to their original state
+        g.selectAll('.transaction-point')
+          .style('opacity', (d: any) => {
+            const point = d as DataPoint;
+            return point.isRecurring ? 0.9 : 0.7;
+          })
           .attr('r', 4)
           .attr('stroke-width', 2);
+        
+        // Remove any recurring connection lines
+        g.selectAll('.recurring-connection-line').remove();
       });
 
     // Add grid lines
@@ -277,20 +365,39 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       legendY += 20;
     }
 
-    // Transaction points legend
+    // One-time transactions legend
     legend.append('circle')
       .attr('cx', 10)
       .attr('cy', legendY)
       .attr('r', 4)
       .attr('fill', '#3b82f6')
       .attr('stroke', '#ffffff')
-      .attr('stroke-width', 2);
+      .attr('stroke-width', 2)
+      .style('opacity', 0.7);
     
     legend.append('text')
       .attr('x', 25)
       .attr('y', legendY + 5)
       .style('font-size', '12px')
-      .text(isCumulative ? 'Spending Points' : 'Transaction Amounts');
+      .text('One-time Transactions');
+
+    legendY += 20;
+
+    // Recurring transactions legend
+    legend.append('circle')
+      .attr('cx', 10)
+      .attr('cy', legendY)
+      .attr('r', 4)
+      .attr('fill', '#10b981')
+      .attr('stroke', '#ffffff')
+      .attr('stroke-width', 2)
+      .style('opacity', 0.9);
+    
+    legend.append('text')
+      .attr('x', 25)
+      .attr('y', legendY + 5)
+      .style('font-size', '12px')
+      .text('Recurring Transactions');
 
     legendY += 20;
 
