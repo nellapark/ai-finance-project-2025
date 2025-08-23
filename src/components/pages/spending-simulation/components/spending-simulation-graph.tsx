@@ -6,6 +6,13 @@ import * as d3 from 'd3';
 interface DataPoint {
   time: Date;
   amount: number;
+  cumulativeBalance?: number;
+  originalAmount?: number;
+  description?: string;
+  category?: string;
+  confidence?: number;
+  isRecurring?: boolean;
+  type?: string;
 }
 
 interface SpendingSimulationGraphProps {
@@ -48,16 +55,9 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
 
     const yScale = d3
       .scaleLinear()
-      .domain(d3.extent(data, (d) => d.amount) as [number, number])
+      .domain(d3.extent(data, (d) => d.cumulativeBalance || d.amount) as [number, number])
       .nice()
       .range([innerHeight, 0]);
-
-    // Create line generator
-    const line = d3
-      .line<DataPoint>()
-      .x((d) => xScale(d.time))
-      .y((d) => yScale(d.amount))
-      .curve(d3.curveMonotoneX);
 
     // Add X axis
     g.append('g')
@@ -81,28 +81,92 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .attr('fill', 'currentColor')
       .style('text-anchor', 'middle')
       .style('font-size', '12px')
-      .text('Amount ($)');
+      .text('Account Balance ($)');
 
-    // Add the line
+    // Create line generator for cumulative balance
+    const line = d3
+      .line<DataPoint>()
+      .x((d) => xScale(d.time))
+      .y((d) => yScale(d.cumulativeBalance || d.amount))
+      .curve(d3.curveMonotoneX);
+
+    // Add the main balance line
     g.append('path')
       .datum(data)
       .attr('fill', 'none')
       .attr('stroke', '#3b82f6')
-      .attr('stroke-width', 2)
+      .attr('stroke-width', 3)
       .attr('d', line);
 
-    // Add dots for data points
-    g.selectAll('.dot')
+    // Add data points on the line
+    g.selectAll('.balance-point')
       .data(data)
       .enter()
       .append('circle')
-      .attr('class', 'dot')
+      .attr('class', 'balance-point')
       .attr('cx', (d) => xScale(d.time))
-      .attr('cy', (d) => yScale(d.amount))
+      .attr('cy', (d) => yScale(d.cumulativeBalance || d.amount))
       .attr('r', 4)
       .attr('fill', '#3b82f6')
       .attr('stroke', '#ffffff')
-      .attr('stroke-width', 2);
+      .attr('stroke-width', 2)
+      .style('cursor', 'pointer');
+
+    // Add special indicators for large transactions
+    g.selectAll('.large-transaction')
+      .data(data.filter(d => Math.abs(d.originalAmount || d.amount) > 500))
+      .enter()
+      .append('circle')
+      .attr('class', 'large-transaction')
+      .attr('cx', (d) => xScale(d.time))
+      .attr('cy', (d) => yScale(d.cumulativeBalance || d.amount))
+      .attr('r', 8)
+      .attr('fill', 'none')
+      .attr('stroke', '#ef4444')
+      .attr('stroke-width', 2)
+      .attr('opacity', 0.8);
+
+    // Add tooltip functionality
+    const tooltip = d3.select('body').append('div')
+      .attr('class', 'tooltip')
+      .style('position', 'absolute')
+      .style('visibility', 'hidden')
+      .style('background', 'rgba(0, 0, 0, 0.8)')
+      .style('color', 'white')
+      .style('padding', '8px')
+      .style('border-radius', '4px')
+      .style('font-size', '12px')
+      .style('pointer-events', 'none')
+      .style('z-index', '1000');
+
+    g.selectAll('.balance-point')
+      .on('mouseover', function(event, d) {
+        tooltip.style('visibility', 'visible')
+          .html(`
+            <strong>${d.description || 'Balance Point'}</strong><br/>
+            Balance: $${(d.cumulativeBalance || d.amount).toLocaleString()}<br/>
+            Transaction: $${(d.originalAmount || 0).toFixed(2)}<br/>
+            Category: ${d.category || 'N/A'}<br/>
+            Date: ${d.time.toLocaleDateString()}<br/>
+            ${d.isRecurring ? `Recurring: Yes` : ''}<br/>
+            ${d.confidence ? `Confidence: ${(d.confidence * 100).toFixed(0)}%` : ''}
+          `);
+        
+        d3.select(this)
+          .attr('r', 6)
+          .attr('stroke-width', 3);
+      })
+      .on('mousemove', function(event) {
+        tooltip.style('top', (event.pageY - 10) + 'px')
+          .style('left', (event.pageX + 10) + 'px');
+      })
+      .on('mouseout', function(event, d) {
+        tooltip.style('visibility', 'hidden');
+        
+        d3.select(this)
+          .attr('r', 4)
+          .attr('stroke-width', 2);
+      });
 
     // Add grid lines
     g.append('g')
@@ -127,6 +191,61 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       )
       .style('stroke-dasharray', '3,3')
       .style('opacity', 0.3);
+
+    // Add legend
+    const legend = svg.append('g')
+      .attr('class', 'legend')
+      .attr('transform', `translate(${width - 200}, 20)`);
+
+    // Balance line legend
+    legend.append('line')
+      .attr('x1', 0)
+      .attr('y1', 0)
+      .attr('x2', 20)
+      .attr('y2', 0)
+      .attr('stroke', '#3b82f6')
+      .attr('stroke-width', 3);
+    
+    legend.append('text')
+      .attr('x', 25)
+      .attr('y', 5)
+      .style('font-size', '12px')
+      .text('Account Balance');
+
+    // Balance points legend
+    legend.append('circle')
+      .attr('cx', 10)
+      .attr('cy', 20)
+      .attr('r', 4)
+      .attr('fill', '#3b82f6')
+      .attr('stroke', '#ffffff')
+      .attr('stroke-width', 2);
+    
+    legend.append('text')
+      .attr('x', 25)
+      .attr('y', 25)
+      .style('font-size', '12px')
+      .text('Transaction Points');
+
+    // Large transaction legend
+    legend.append('circle')
+      .attr('cx', 10)
+      .attr('cy', 40)
+      .attr('r', 6)
+      .attr('fill', 'none')
+      .attr('stroke', '#ef4444')
+      .attr('stroke-width', 2);
+    
+    legend.append('text')
+      .attr('x', 25)
+      .attr('y', 45)
+      .style('font-size', '12px')
+      .text('Large Transactions');
+
+    // Cleanup tooltip on component unmount
+    return () => {
+      d3.select('body').selectAll('.tooltip').remove();
+    };
   }, [data, width, height]);
 
   return (

@@ -11,28 +11,64 @@ interface SpendingSimulationProps {
   className?: string;
 }
 
+interface SimulatedTransaction {
+  date: string;
+  description: string;
+  amount: number;
+  category: string;
+  account: string;
+  type: string;
+  confidence: number;
+  isRecurring: boolean;
+  recurringPattern: string | null;
+}
+
+interface RecurringTransaction {
+  description: string;
+  averageAmount: number;
+  frequency: string;
+  category: string;
+  confidence: number;
+  nextOccurrence: string;
+}
+
+interface SignificantTransaction {
+  description: string;
+  averageAmount: number;
+  frequency: string;
+  category: string;
+  lastOccurrence: string;
+  predictedNext: string;
+}
+
+interface SeasonalPattern {
+  season: string;
+  category: string;
+  averageIncrease: number;
+  reason: string;
+}
+
 interface LLMAnalysis {
-  monthlyProjections: Array<{
-    month: number;
-    date: string;
-    projectedBalance: number;
-    monthlyIncome: number;
-    monthlyExpenses: number;
-    debtPayments: number;
-    netChange: number;
-  }>;
+  simulatedTransactions: SimulatedTransaction[];
+  patterns: {
+    recurringTransactions: RecurringTransaction[];
+    significantTransactions: SignificantTransaction[];
+    seasonalPatterns: SeasonalPattern[];
+  };
   insights: {
-    averageMonthlySpending: number;
+    totalPredictedTransactions: number;
+    recurringTransactionCount: number;
+    averageTransactionAmount: number;
     primarySpendingCategories: string[];
     spendingTrend: string;
     riskFactors: string[];
     recommendations: string[];
   };
   summary: {
-    startingBalance: number;
-    projectedEndBalance: number;
-    totalDebtPayments: number;
-    averageMonthlyIncome: number;
+    projectedTotalIncome: number;
+    projectedTotalExpenses: number;
+    projectedNetChange: number;
+    confidenceScore: number;
   };
 }
 
@@ -152,21 +188,40 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
       const analysis: LLMAnalysis = await response.json();
       
       console.log('✅ [Client] Analysis received:', {
-        monthlyProjections: analysis.monthlyProjections?.length || 0,
+        simulatedTransactions: analysis.simulatedTransactions?.length || 0,
         insights: !!analysis.insights,
         summary: !!analysis.summary,
-        startingBalance: analysis.summary?.startingBalance,
-        projectedEndBalance: analysis.summary?.projectedEndBalance
+        projectedTotalIncome: analysis.summary?.projectedTotalIncome,
+        projectedTotalExpenses: analysis.summary?.projectedTotalExpenses
       });
 
       setLlmAnalysis(analysis);
 
-      // Convert LLM analysis to graph data
+      // Convert LLM analysis to graph data with cumulative balance
       console.log('📈 [Client] Converting analysis to graph data...');
-      const graphData: DataPoint[] = analysis.monthlyProjections.map(projection => ({
-        time: new Date(projection.date),
-        amount: projection.projectedBalance,
-      }));
+      
+      // Sort transactions by date first
+      const sortedTransactions = [...analysis.simulatedTransactions].sort((a, b) => 
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+      // Calculate cumulative balance
+      let runningBalance = 75000; // Starting balance - could be derived from data
+      const graphData: DataPoint[] = sortedTransactions.map(transaction => {
+        runningBalance += transaction.amount; // Add transaction amount (positive for income, negative for expenses)
+        
+        return {
+          time: new Date(transaction.date),
+          amount: Math.abs(transaction.amount), // Individual transaction amount
+          cumulativeBalance: runningBalance, // Running balance for line graph
+          originalAmount: transaction.amount, // Keep original for reference
+          description: transaction.description,
+          category: transaction.category,
+          confidence: transaction.confidence,
+          isRecurring: transaction.isRecurring,
+          type: transaction.type
+        };
+      });
 
       console.log('📊 [Client] Graph data created:', {
         dataPoints: graphData.length,
@@ -175,8 +230,14 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
           end: graphData[graphData.length - 1]?.time
         },
         balanceRange: {
-          start: graphData[0]?.amount,
-          end: graphData[graphData.length - 1]?.amount
+          start: graphData[0]?.cumulativeBalance,
+          end: graphData[graphData.length - 1]?.cumulativeBalance,
+          min: Math.min(...graphData.map(d => d.cumulativeBalance || 0)),
+          max: Math.max(...graphData.map(d => d.cumulativeBalance || 0))
+        },
+        transactionTypes: {
+          income: graphData.filter(d => d.type === 'Credit').length,
+          expenses: graphData.filter(d => d.type === 'Debit').length
         }
       });
 
@@ -331,72 +392,144 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                 <h2 className="text-xl font-semibold text-gray-800 mb-4">
                   AI-Powered Financial Insights
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
                   <div className="text-center p-4 bg-blue-50 rounded-lg">
                     <div className="text-2xl font-bold text-blue-600 mb-1">
-                      ${llmAnalysis?.summary.startingBalance.toLocaleString() || (graphData.length > 0 ? Math.round(graphData[0].amount).toLocaleString() : '0')}
+                      {llmAnalysis?.insights.totalPredictedTransactions || graphData.length}
                     </div>
-                    <div className="text-sm text-blue-800">Starting Balance</div>
-                  </div>
-                  <div className="text-center p-4 bg-orange-50 rounded-lg">
-                    <div className="text-2xl font-bold text-orange-600 mb-1">
-                      ${llmAnalysis?.insights.averageMonthlySpending.toLocaleString() || (graphData.length > 1 ? Math.round((graphData[0].amount - graphData[graphData.length - 1].amount) / 12).toLocaleString() : '0')}
-                    </div>
-                    <div className="text-sm text-orange-800">Avg Monthly Spending</div>
+                    <div className="text-sm text-blue-800">Predicted Transactions</div>
                   </div>
                   <div className="text-center p-4 bg-green-50 rounded-lg">
                     <div className="text-2xl font-bold text-green-600 mb-1">
-                      ${llmAnalysis?.summary.projectedEndBalance.toLocaleString() || (graphData.length > 0 ? Math.round(graphData[graphData.length - 1].amount).toLocaleString() : '0')}
+                      {llmAnalysis?.insights.recurringTransactionCount || 0}
                     </div>
-                    <div className="text-sm text-green-800">Projected Balance</div>
+                    <div className="text-sm text-green-800">Recurring Transactions</div>
+                  </div>
+                  <div className="text-center p-4 bg-orange-50 rounded-lg">
+                    <div className="text-2xl font-bold text-orange-600 mb-1">
+                      ${Math.abs(llmAnalysis?.insights.averageTransactionAmount || 0).toLocaleString()}
+                    </div>
+                    <div className="text-sm text-orange-800">Avg Transaction Amount</div>
+                  </div>
+                  <div className="text-center p-4 bg-purple-50 rounded-lg">
+                    <div className="text-2xl font-bold text-purple-600 mb-1">
+                      {llmAnalysis?.summary.confidenceScore ? Math.round(llmAnalysis.summary.confidenceScore * 100) : 0}%
+                    </div>
+                    <div className="text-sm text-purple-800">Confidence Score</div>
                   </div>
                 </div>
 
                 {llmAnalysis && (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Spending Categories */}
-                    <div>
-                      <h3 className="font-semibold text-gray-800 mb-3">Primary Spending Categories</h3>
-                      <div className="flex flex-wrap gap-2">
-                        {llmAnalysis.insights.primarySpendingCategories.map((category, index) => (
-                          <span
-                            key={index}
-                            className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full"
-                          >
-                            {category}
-                          </span>
-                        ))}
+                  <div className="space-y-6">
+                    {/* Transaction Patterns */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {/* Recurring Transactions */}
+                      <div>
+                        <h3 className="font-semibold text-gray-800 mb-3">Recurring Transactions</h3>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {llmAnalysis.patterns.recurringTransactions.map((transaction, index) => (
+                            <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                              <div>
+                                <div className="font-medium text-sm">{transaction.description}</div>
+                                <div className="text-xs text-gray-600">{transaction.frequency} • {transaction.category}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-medium text-sm">${Math.abs(transaction.averageAmount).toLocaleString()}</div>
+                                <div className="text-xs text-gray-600">{Math.round(transaction.confidence * 100)}% confidence</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Significant Transactions */}
+                      <div>
+                        <h3 className="font-semibold text-gray-800 mb-3">Large Transaction Patterns</h3>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {llmAnalysis.patterns.significantTransactions.map((transaction, index) => (
+                            <div key={index} className="flex justify-between items-center p-2 bg-orange-50 rounded">
+                              <div>
+                                <div className="font-medium text-sm">{transaction.description}</div>
+                                <div className="text-xs text-gray-600">{transaction.frequency} • {transaction.category}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-medium text-sm">${Math.abs(transaction.averageAmount).toLocaleString()}</div>
+                                <div className="text-xs text-gray-600">Next: {new Date(transaction.predictedNext).toLocaleDateString()}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Risk Factors */}
-                    <div>
-                      <h3 className="font-semibold text-gray-800 mb-3">Risk Factors</h3>
-                      <ul className="space-y-1">
-                        {llmAnalysis.insights.riskFactors.map((risk, index) => (
-                          <li key={index} className="text-sm text-red-600 flex items-center">
-                            <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                            </svg>
-                            {risk}
-                          </li>
-                        ))}
-                      </ul>
+                    {/* Categories and Insights */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {/* Spending Categories */}
+                      <div>
+                        <h3 className="font-semibold text-gray-800 mb-3">Primary Spending Categories</h3>
+                        <div className="flex flex-wrap gap-2">
+                          {llmAnalysis.insights.primarySpendingCategories.map((category, index) => (
+                            <span
+                              key={index}
+                              className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full"
+                            >
+                              {category}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Seasonal Patterns */}
+                      <div>
+                        <h3 className="font-semibold text-gray-800 mb-3">Seasonal Patterns</h3>
+                        <div className="space-y-2">
+                          {llmAnalysis.patterns.seasonalPatterns.map((pattern, index) => (
+                            <div key={index} className="flex justify-between items-center p-2 bg-yellow-50 rounded">
+                              <div>
+                                <div className="font-medium text-sm capitalize">{pattern.season}</div>
+                                <div className="text-xs text-gray-600">{pattern.reason}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-medium text-sm">{pattern.category}</div>
+                                <div className="text-xs text-yellow-700">+${pattern.averageIncrease}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
 
-                    {/* Recommendations */}
-                    <div className="lg:col-span-2">
-                      <h3 className="font-semibold text-gray-800 mb-3">AI Recommendations</h3>
-                      <ul className="space-y-2">
-                        {llmAnalysis.insights.recommendations.map((recommendation, index) => (
-                          <li key={index} className="text-sm text-green-700 flex items-start">
-                            <svg className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                            {recommendation}
-                          </li>
-                        ))}
-                      </ul>
+                    {/* Risk Factors and Recommendations */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {/* Risk Factors */}
+                      <div>
+                        <h3 className="font-semibold text-gray-800 mb-3">Risk Factors</h3>
+                        <ul className="space-y-1">
+                          {llmAnalysis.insights.riskFactors.map((risk, index) => (
+                            <li key={index} className="text-sm text-red-600 flex items-center">
+                              <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                              </svg>
+                              {risk}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Recommendations */}
+                      <div>
+                        <h3 className="font-semibold text-gray-800 mb-3">AI Recommendations</h3>
+                        <ul className="space-y-2">
+                          {llmAnalysis.insights.recommendations.map((recommendation, index) => (
+                            <li key={index} className="text-sm text-green-700 flex items-start">
+                              <svg className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                              {recommendation}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
                   </div>
                 )}
