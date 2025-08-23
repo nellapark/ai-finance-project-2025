@@ -407,12 +407,12 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                 <h2 className="text-xl font-semibold text-gray-800 mb-4">
                   Your Spending Projection
                 </h2>
-                <div className="flex justify-center">
+                <div className="w-full overflow-x-auto">
                   <SpendingSimulationGraph
                     data={graphData}
-                    width={800}
-                    height={400}
-                    className="max-w-full"
+                    width={1200}
+                    height={500}
+                    className="w-full min-w-full"
                   />
                 </div>
               </section>

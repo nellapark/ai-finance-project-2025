@@ -24,8 +24,8 @@ interface SpendingSimulationGraphProps {
 
 const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
   data = generateSampleData(),
-  width = 800,
-  height = 400,
+  width = 1200,
+  height = 500,
   className = '',
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -249,12 +249,14 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
   }, [data, width, height]);
 
   return (
-    <div className={`spending-simulation-graph ${className}`}>
+    <div className={`spending-simulation-graph w-full ${className}`}>
       <svg
         ref={svgRef}
         width={width}
         height={height}
-        className="border border-gray-200 rounded-lg bg-white"
+        className="border border-gray-200 rounded-lg bg-white w-full"
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="xMidYMid meet"
       />
     </div>
   );
