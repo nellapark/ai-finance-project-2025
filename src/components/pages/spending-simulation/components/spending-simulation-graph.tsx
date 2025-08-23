@@ -6,6 +6,7 @@ import * as d3 from 'd3';
 interface DataPoint {
   time: Date;
   amount: number;
+  cumulativeBalance?: number;
   originalAmount?: number;
   description?: string;
   category?: string;
@@ -19,6 +20,7 @@ interface SpendingSimulationGraphProps {
   width?: number;
   height?: number;
   className?: string;
+  isCumulative?: boolean;
 }
 
 const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
@@ -26,6 +28,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
   width = 1200,
   height = 500,
   className = '',
+  isCumulative = false,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -54,7 +57,10 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
 
     const yScale = d3
       .scaleLinear()
-      .domain([0, d3.max(data, (d) => d.amount) as number])
+      .domain(isCumulative 
+        ? [0, d3.max(data, (d) => d.cumulativeBalance || d.amount) as number]
+        : [0, d3.max(data, (d) => d.amount) as number]
+      )
       .nice()
       .range([innerHeight, 0]);
 
@@ -80,9 +86,23 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .attr('fill', 'currentColor')
       .style('text-anchor', 'middle')
       .style('font-size', '12px')
-      .text('Transaction Amount ($)');
+      .text(isCumulative ? 'Cumulative Spending ($)' : 'Transaction Amount ($)');
 
-    // No line graph - just individual transaction points
+    // Add line graph for cumulative mode
+    if (isCumulative) {
+      const line = d3
+        .line<DataPoint>()
+        .x((d) => xScale(d.time))
+        .y((d) => yScale(d.cumulativeBalance || d.amount))
+        .curve(d3.curveMonotoneX);
+
+      g.append('path')
+        .datum(data)
+        .attr('fill', 'none')
+        .attr('stroke', '#3b82f6')
+        .attr('stroke-width', 3)
+        .attr('d', line);
+    }
 
     // Add transaction points
     g.selectAll('.transaction-point')
@@ -91,7 +111,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .append('circle')
       .attr('class', 'transaction-point')
       .attr('cx', (d) => xScale(d.time))
-      .attr('cy', (d) => yScale(d.amount))
+      .attr('cy', (d) => isCumulative ? yScale(d.cumulativeBalance || d.amount) : yScale(d.amount))
       .attr('r', 4)
       .attr('fill', '#3b82f6')
       .attr('stroke', '#ffffff')
@@ -105,7 +125,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .append('circle')
       .attr('class', 'large-transaction')
       .attr('cx', (d) => xScale(d.time))
-      .attr('cy', (d) => yScale(d.amount))
+      .attr('cy', (d) => isCumulative ? yScale(d.cumulativeBalance || d.amount) : yScale(d.amount))
       .attr('r', 8)
       .attr('fill', 'none')
       .attr('stroke', '#ef4444')
@@ -126,10 +146,11 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .style('z-index', '1000');
 
     g.selectAll('.transaction-point')
-      .on('mouseover', function(event, d) {
+      .on('mouseover', function(event, d: DataPoint) {
         tooltip.style('visibility', 'visible')
           .html(`
             <strong>${d.description || 'Transaction'}</strong><br/>
+            ${isCumulative ? `Cumulative Total: $${(d.cumulativeBalance || d.amount).toLocaleString()}<br/>` : ''}
             Amount: $${d.amount.toLocaleString()}<br/>
             Original: $${(d.originalAmount || 0).toFixed(2)}<br/>
             Category: ${d.category || 'N/A'}<br/>
@@ -183,10 +204,31 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .attr('class', 'legend')
       .attr('transform', `translate(${width - 200}, 20)`);
 
+    let legendY = 10;
+
+    // Line legend for cumulative mode
+    if (isCumulative) {
+      legend.append('line')
+        .attr('x1', 0)
+        .attr('y1', legendY)
+        .attr('x2', 20)
+        .attr('y2', legendY)
+        .attr('stroke', '#3b82f6')
+        .attr('stroke-width', 3);
+      
+      legend.append('text')
+        .attr('x', 25)
+        .attr('y', legendY + 5)
+        .style('font-size', '12px')
+        .text('Cumulative Spending');
+      
+      legendY += 20;
+    }
+
     // Transaction points legend
     legend.append('circle')
       .attr('cx', 10)
-      .attr('cy', 10)
+      .attr('cy', legendY)
       .attr('r', 4)
       .attr('fill', '#3b82f6')
       .attr('stroke', '#ffffff')
@@ -194,14 +236,16 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
     
     legend.append('text')
       .attr('x', 25)
-      .attr('y', 15)
+      .attr('y', legendY + 5)
       .style('font-size', '12px')
-      .text('Transaction Amounts');
+      .text(isCumulative ? 'Spending Points' : 'Transaction Amounts');
+
+    legendY += 20;
 
     // Large transaction legend
     legend.append('circle')
       .attr('cx', 10)
-      .attr('cy', 30)
+      .attr('cy', legendY)
       .attr('r', 6)
       .attr('fill', 'none')
       .attr('stroke', '#ef4444')
@@ -209,7 +253,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
     
     legend.append('text')
       .attr('x', 25)
-      .attr('y', 35)
+      .attr('y', legendY + 5)
       .style('font-size', '12px')
       .text('Large Transactions ($500+)');
 
@@ -217,7 +261,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
     return () => {
       d3.select('body').selectAll('.tooltip').remove();
     };
-  }, [data, width, height]);
+  }, [data, width, height, isCumulative]);
 
   return (
     <div className={`spending-simulation-graph w-full ${className}`}>

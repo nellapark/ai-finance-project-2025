@@ -85,6 +85,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
   const [graphData, setGraphData] = useState<DataPoint[]>([]);
   const [llmAnalysis, setLlmAnalysis] = useState<LLMAnalysis | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [isCumulative, setIsCumulative] = useState(true);
   
   // Testing mode constant - set to true to use existing CSV files
   const isTesting = true;
@@ -224,11 +225,15 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
         new Date(a.date).getTime() - new Date(b.date).getTime()
       );
 
-      // Create graph data with absolute transaction amounts
+      // Create graph data with both individual and cumulative amounts
+      let cumulativeTotal = 0; // Start from 0
       const graphData: DataPoint[] = sortedTransactions.map(transaction => {
+        cumulativeTotal += Math.abs(transaction.amount); // Add absolute value of transaction amount
+        
         return {
           time: new Date(transaction.date),
-          amount: Math.abs(transaction.amount), // Use absolute value for y-axis
+          amount: Math.abs(transaction.amount), // Individual transaction amount (absolute value)
+          cumulativeBalance: cumulativeTotal, // Running total of absolute amounts
           originalAmount: transaction.amount, // Keep original for reference
           description: transaction.description,
           category: transaction.category,
@@ -248,6 +253,11 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
           min: Math.min(...graphData.map(d => d.amount)),
           max: Math.max(...graphData.map(d => d.amount)),
           average: graphData.reduce((sum, d) => sum + d.amount, 0) / graphData.length
+        },
+        cumulativeRange: {
+          start: 0,
+          end: graphData[graphData.length - 1]?.cumulativeBalance,
+          max: Math.max(...graphData.map(d => d.cumulativeBalance || 0))
         },
         transactionTypes: {
           income: graphData.filter(d => d.type === 'Credit').length,
@@ -399,15 +409,34 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
             <>
               {/* Graph Section */}
               <section className="bg-gray-50 rounded-lg p-6">
-                <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                  Your Spending Projection
-                </h2>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-semibold text-gray-800">
+                    Your Spending Projection
+                  </h2>
+                  <div className="flex items-center space-x-3">
+                    <span className="text-sm text-gray-600">Individual</span>
+                    <button
+                      onClick={() => setIsCumulative(!isCumulative)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                        isCumulative ? 'bg-blue-600' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          isCumulative ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                    <span className="text-sm text-gray-600">Cumulative</span>
+                  </div>
+                </div>
                 <div className="w-full overflow-x-auto">
                   <SpendingSimulationGraph
                     data={graphData}
                     width={1200}
                     height={500}
                     className="w-full min-w-full"
+                    isCumulative={isCumulative}
                   />
                 </div>
               </section>
