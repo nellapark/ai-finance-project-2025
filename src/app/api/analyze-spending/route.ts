@@ -12,21 +12,40 @@ export async function POST(request: NextRequest) {
   console.log('🚀 [API] Starting spending analysis request');
   
   try {
-    const { transactionData, debtData } = await request.json();
+    const { transactionData, debtData, isTesting = false } = await request.json();
     
     console.log('📊 [API] Received data:', {
       transactionCount: transactionData?.length || 0,
       debtCount: debtData?.length || 0,
       hasTransactionData: !!transactionData,
-      hasDebtData: !!debtData
+      hasDebtData: !!debtData,
+      isTesting: isTesting
     });
 
-    if (!transactionData && !debtData) {
+    if (!transactionData && !debtData && !isTesting) {
       console.log('❌ [API] No data provided for analysis');
       return NextResponse.json(
         { error: 'No data provided for analysis' },
         { status: 400 }
       );
+    }
+
+    // Testing mode: Use existing CSV file instead of calling LLM
+    if (isTesting) {
+      console.log('🧪 [API] Testing mode enabled - using existing CSV file');
+      try {
+        const simulatedTransactions = await readExistingCSV();
+        const analysis = createMockAnalysis(simulatedTransactions);
+        
+        const totalDuration = Date.now() - startTime;
+        console.log('🎉 [API] Testing mode completed successfully in', totalDuration, 'ms');
+        
+        return NextResponse.json(analysis);
+      } catch (testingError) {
+        console.error('❌ [API] Testing mode failed:', testingError);
+        console.log('🔄 [API] Falling back to generating new transactions');
+        // Fall through to normal processing with generated fallback data
+      }
     }
 
     // Log sample data for debugging
@@ -614,4 +633,192 @@ function generateFallbackTransactions(transactionData: TransactionDataInput[], d
   
   console.log(`✅ [Fallback] Generated ${transactions.length} fallback transactions`);
   return transactions;
+}
+
+async function readExistingCSV(): Promise<FallbackTransaction[]> {
+  console.log('📄 [Testing] Reading existing CSV file from simulated-outputs');
+  
+  const outputDir = path.join(process.cwd(), 'simulated-outputs');
+  
+  if (!fs.existsSync(outputDir)) {
+    throw new Error('simulated-outputs directory does not exist');
+  }
+  
+  // Find any CSV file in the directory
+  const files = fs.readdirSync(outputDir)
+    .filter(file => file.endsWith('.csv'))
+    .sort()
+    .reverse(); // Most recent first
+  
+  if (files.length === 0) {
+    throw new Error('No CSV files found in simulated-outputs directory');
+  }
+  
+  const csvFile = files[0];
+  const csvPath = path.join(outputDir, csvFile);
+  
+  console.log(`📄 [Testing] Using CSV file: ${csvFile}`);
+  
+  const csvContent = fs.readFileSync(csvPath, 'utf8');
+  const lines = csvContent.split('\n').filter(line => line.trim());
+  
+  if (lines.length <= 1) {
+    throw new Error('CSV file is empty or only contains headers');
+  }
+  
+  // Skip header line and parse data
+  const transactions: FallbackTransaction[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    const values = parseCSVLine(line);
+    
+    if (values.length >= 9) {
+      transactions.push({
+        date: values[0],
+        description: values[1].replace(/"/g, ''),
+        amount: parseFloat(values[2]) || 0,
+        category: values[3].replace(/"/g, ''),
+        account: values[4].replace(/"/g, ''),
+        type: values[5].replace(/"/g, ''),
+        confidence: parseFloat(values[6]) || 0,
+        isRecurring: values[7].toLowerCase() === 'true',
+        recurringPattern: values[8].replace(/"/g, '') || null
+      });
+    }
+  }
+  
+  console.log(`✅ [Testing] Loaded ${transactions.length} transactions from CSV`);
+  return transactions;
+}
+
+function parseCSVLine(line: string): string[] {
+  const values: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      values.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  
+  values.push(current); // Add the last value
+  return values;
+}
+
+interface MockAnalysis {
+  simulatedTransactions: FallbackTransaction[];
+  patterns: {
+    recurringTransactions: any[];
+    significantTransactions: any[];
+    seasonalPatterns: any[];
+  };
+  insights: {
+    totalPredictedTransactions: number;
+    recurringTransactionCount: number;
+    averageTransactionAmount: number;
+    primarySpendingCategories: string[];
+    spendingTrend: string;
+    riskFactors: string[];
+    recommendations: string[];
+  };
+  summary: {
+    projectedTotalIncome: number;
+    projectedTotalExpenses: number;
+    projectedNetChange: number;
+    confidenceScore: number;
+  };
+}
+
+function createMockAnalysis(simulatedTransactions: FallbackTransaction[]): MockAnalysis {
+  console.log('🔄 [Testing] Creating mock analysis from CSV transactions');
+  
+  // Calculate basic statistics
+  const totalTransactions = simulatedTransactions.length;
+  const recurringTransactions = simulatedTransactions.filter(t => t.isRecurring);
+  const expenses = simulatedTransactions.filter(t => t.amount < 0);
+  const income = simulatedTransactions.filter(t => t.amount > 0);
+  
+  const totalExpenses = expenses.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+  const totalIncome = income.reduce((sum, t) => sum + t.amount, 0);
+  const averageTransactionAmount = totalTransactions > 0 ? 
+    simulatedTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0) / totalTransactions : 0;
+  
+  // Get unique categories
+  const categories = [...new Set(simulatedTransactions.map(t => t.category))];
+  
+  // Create mock patterns
+  const recurringPatterns = recurringTransactions.slice(0, 10).map(t => ({
+    description: t.description,
+    averageAmount: Math.abs(t.amount),
+    frequency: t.recurringPattern || 'monthly',
+    category: t.category,
+    confidence: t.confidence,
+    nextOccurrence: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  }));
+  
+  const significantTransactions = expenses
+    .filter(t => Math.abs(t.amount) > 500)
+    .slice(0, 5)
+    .map(t => ({
+      description: t.description,
+      averageAmount: Math.abs(t.amount),
+      frequency: 'irregular',
+      category: t.category,
+      lastOccurrence: t.date,
+      predictedNext: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    }));
+  
+  const seasonalPatterns = [
+    {
+      season: 'summer',
+      category: 'Utilities',
+      averageIncrease: 35,
+      reason: 'Higher electricity usage for cooling'
+    },
+    {
+      season: 'winter',
+      category: 'Shopping',
+      averageIncrease: 200,
+      reason: 'Holiday shopping and gifts'
+    }
+  ];
+  
+  return {
+    simulatedTransactions,
+    patterns: {
+      recurringTransactions: recurringPatterns,
+      significantTransactions: significantTransactions,
+      seasonalPatterns: seasonalPatterns
+    },
+    insights: {
+      totalPredictedTransactions: totalTransactions,
+      recurringTransactionCount: recurringTransactions.length,
+      averageTransactionAmount: averageTransactionAmount,
+      primarySpendingCategories: categories.slice(0, 5),
+      spendingTrend: totalExpenses > totalIncome ? 'increasing' : 'stable',
+      riskFactors: [
+        'High recurring expenses detected',
+        'Large irregular purchases identified'
+      ],
+      recommendations: [
+        'Consider setting up automatic savings transfers',
+        'Review recurring subscriptions for potential savings',
+        'Build emergency fund for large irregular expenses'
+      ]
+    },
+    summary: {
+      projectedTotalIncome: totalIncome,
+      projectedTotalExpenses: totalExpenses,
+      projectedNetChange: totalIncome - totalExpenses,
+      confidenceScore: 0.85
+    }
+  };
 }

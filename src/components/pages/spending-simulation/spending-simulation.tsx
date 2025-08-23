@@ -85,9 +85,27 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
   const [graphData, setGraphData] = useState<DataPoint[]>([]);
   const [llmAnalysis, setLlmAnalysis] = useState<LLMAnalysis | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  
+  // Testing mode constant - set to true to use existing CSV files
+  const isTesting = true;
 
   const handleConnectBanks = () => {
     setIsModalOpen(true);
+  };
+
+  const handleTestingMode = async () => {
+    setHasConnectedData(true);
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    
+    try {
+      await analyzeDataWithLLM(null, null, isTesting);
+    } catch (error) {
+      console.error('Error in testing mode:', error);
+      setAnalysisError('Failed to load testing data. Please try again.');
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const handleDataUploaded = async (transactionFile: File | null, debtFile: File | null) => {
@@ -101,7 +119,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
     setAnalysisError(null);
     
     try {
-      await analyzeDataWithLLM(transactionFile, debtFile);
+      await analyzeDataWithLLM(transactionFile, debtFile, isTesting);
     } catch (error) {
       console.error('Error analyzing data:', error);
       setAnalysisError('Failed to analyze your financial data. Please try again.');
@@ -112,7 +130,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
     }
   };
 
-  const analyzeDataWithLLM = async (transactionFile: File | null, debtFile: File | null) => {
+  const analyzeDataWithLLM = async (transactionFile: File | null, debtFile: File | null, testingMode: boolean = false) => {
     const startTime = Date.now();
     console.log('🚀 [Client] Starting LLM analysis...');
     
@@ -152,6 +170,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
       const requestData = {
         transactionData,
         debtData,
+        isTesting: testingMode,
       };
       
       console.log('📊 [Client] Sending data to API:', {
@@ -302,10 +321,21 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                 }
               </p>
             </div>
-            <div className="mt-4 sm:mt-0">
+            <div className="mt-4 sm:mt-0 flex gap-3">
+              <button
+                onClick={handleTestingMode}
+                disabled={isAnalyzing}
+                className="inline-flex items-center px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                {isAnalyzing ? 'Loading...' : 'Test Mode'}
+              </button>
               <button
                 onClick={handleConnectBanks}
-                className="inline-flex items-center px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+                disabled={isAnalyzing}
+                className="inline-flex items-center px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -617,15 +647,30 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                   </div>
                 </div>
 
-                <button
-                  onClick={handleConnectBanks}
-                  className="inline-flex items-center px-8 py-4 bg-blue-600 text-white font-medium text-lg rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-                >
-                  <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  Connect Your Banks
-                </button>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <button
+                    onClick={handleTestingMode}
+                    className="inline-flex items-center px-6 py-3 bg-green-600 text-white font-medium text-lg rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
+                  >
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    Try Test Mode
+                  </button>
+                  <button
+                    onClick={handleConnectBanks}
+                    className="inline-flex items-center px-8 py-4 bg-blue-600 text-white font-medium text-lg rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+                  >
+                    <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Connect Your Banks
+                  </button>
+                </div>
+                
+                <p className="mt-4 text-sm text-gray-500">
+                  <strong>Test Mode:</strong> Uses pre-generated sample data to demonstrate the application without uploading files.
+                </p>
               </div>
             </section>
           )}
