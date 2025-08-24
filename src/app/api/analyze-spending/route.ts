@@ -1573,7 +1573,7 @@ interface CardMilestone {
 }
 
 function analyzeCardOpeningMilestones(transactions: FallbackTransaction[]): CardMilestone[] {
-  console.log('🎯 [Milestones] Analyzing optimal card opening opportunities...');
+  console.log('🎯 [Milestones] Analyzing optimal card opening opportunities based on large transactions...');
   
   if (!transactions || transactions.length === 0) {
     return [];
@@ -1582,111 +1582,228 @@ function analyzeCardOpeningMilestones(transactions: FallbackTransaction[]): Card
   const milestones: CardMilestone[] = [];
   const sortedTransactions = transactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   
-  // Group transactions by month to analyze spending patterns
-  const monthlySpending: Record<string, { total: number; transactions: FallbackTransaction[] }> = {};
+  // Calculate statistical significance for identifying large transactions
+  const amounts = sortedTransactions.map(t => Math.abs(t.amount));
+  const mean = amounts.reduce((sum, amount) => sum + amount, 0) / amounts.length;
+  const variance = amounts.reduce((sum, amount) => sum + Math.pow(amount - mean, 2), 0) / amounts.length;
+  const standardDeviation = Math.sqrt(variance);
+  const largeTransactionThreshold = mean + (1.5 * standardDeviation); // Lower threshold for more opportunities
   
-  sortedTransactions.forEach(transaction => {
-    const date = new Date(transaction.date);
-    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    
-    if (!monthlySpending[monthKey]) {
-      monthlySpending[monthKey] = { total: 0, transactions: [] };
-    }
-    
-    monthlySpending[monthKey].total += Math.abs(transaction.amount);
-    monthlySpending[monthKey].transactions.push(transaction);
+  console.log('📊 [Milestones] Transaction analysis:', {
+    totalTransactions: sortedTransactions.length,
+    mean: mean.toFixed(2),
+    standardDeviation: standardDeviation.toFixed(2),
+    largeTransactionThreshold: largeTransactionThreshold.toFixed(2)
   });
 
-  // Calculate rolling 3-month spending windows
-  const monthKeys = Object.keys(monthlySpending).sort();
+  // Identify large transactions and upcoming spending clusters
+  const largeTransactions = sortedTransactions.filter(t => Math.abs(t.amount) >= largeTransactionThreshold);
   const availableCards = Object.entries(cardDetails);
   
-  console.log('📊 [Milestones] Monthly spending analysis:', {
-    totalMonths: monthKeys.length,
-    availableCards: availableCards.length,
-    avgMonthlySpending: Object.values(monthlySpending).reduce((sum, month) => sum + month.total, 0) / monthKeys.length
-  });
+  console.log('💰 [Milestones] Found', largeTransactions.length, 'large transactions above $' + largeTransactionThreshold.toFixed(0));
 
-  // Track when cards were "opened" to maintain spacing
+  // Track when cards were "opened" to maintain reasonable spacing and yearly limits
   const cardOpenings: { date: Date; card: string }[] = [];
   
-  for (let i = 0; i < monthKeys.length - 2; i++) {
-    const currentMonth = monthKeys[i];
-    const next2Months = monthKeys.slice(i, i + 3);
+  // Group potential opportunities by year to enforce 2-card limit
+  const yearlyOpportunities: Record<string, Array<{
+    date: Date;
+    largeTransaction: FallbackTransaction;
+    windowSpending: number;
+    largeTransactionsInWindow: FallbackTransaction[];
+    monthsBefore: number;
+    bestCard: { name: string; details: Record<string, unknown>; score: number; spendingReq: number; totalValue: number } | null;
+  }>> = {};
+  
+  // First pass: identify all potential opportunities
+  largeTransactions.forEach((largeTransaction, index) => {
+    const transactionDate = new Date(largeTransaction.date);
     
-    // Calculate 3-month spending window
-    const windowSpending = next2Months.reduce((total, monthKey) => {
-      return total + monthlySpending[monthKey].total;
-    }, 0);
-    
-    // Check if there's been enough time since last card opening (minimum 3 months)
-    const currentDate = new Date(currentMonth + '-01');
-    const lastOpening = cardOpenings[cardOpenings.length - 1];
-    const monthsSinceLastOpening = lastOpening ? 
-      (currentDate.getTime() - lastOpening.date.getTime()) / (1000 * 60 * 60 * 24 * 30) : 
-      Infinity;
-    
-    if (monthsSinceLastOpening < 3) {
-      continue; // Too soon since last card opening
-    }
+    // Look for optimal card opening window (1-3 months before large transaction)
+    for (let monthsBefore = 1; monthsBefore <= 3; monthsBefore++) {
+      const potentialOpeningDate = new Date(transactionDate);
+      potentialOpeningDate.setMonth(potentialOpeningDate.getMonth() - monthsBefore);
+      
+      // Check if there's been enough time since last card opening (minimum 3 months for better spacing)
+      const lastOpening = cardOpenings[cardOpenings.length - 1];
+      const monthsSinceLastOpening = lastOpening ? 
+        (potentialOpeningDate.getTime() - lastOpening.date.getTime()) / (1000 * 60 * 60 * 24 * 30) : 
+        Infinity;
+      
+      if (monthsSinceLastOpening < 3) {
+        continue; // Too soon since last card opening
+      }
+      
+      // Calculate spending in the 3-month window after potential opening
+      const windowEndDate = new Date(potentialOpeningDate);
+      windowEndDate.setMonth(windowEndDate.getMonth() + 3);
+      
+      const windowTransactions = sortedTransactions.filter(t => {
+        const tDate = new Date(t.date);
+        return tDate >= potentialOpeningDate && tDate <= windowEndDate;
+      });
+      
+      const windowSpending = windowTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      const largeTransactionsInWindow = windowTransactions.filter(t => Math.abs(t.amount) >= largeTransactionThreshold);
+      
+      // Skip if window doesn't include the target large transaction
+      if (!windowTransactions.some(t => t.date === largeTransaction.date)) {
+        continue;
+      }
 
-    // Find the best card for this spending period
-    let bestCard: { name: string; details: Record<string, unknown>; score: number; spendingReq: number } | null = null;
-    
-    for (const [cardName, cardData] of availableCards) {
-      const signUpBonus = (cardData as Record<string, unknown>).signUpBonus as string || '';
+      // Find the best card for this spending window considering all available cards
+      let bestCard: { name: string; details: Record<string, unknown>; score: number; spendingReq: number; totalValue: number } | null = null;
       
-      // Extract spending requirement from sign-up bonus text
-      const spendingMatch = signUpBonus.match(/\$(\d+(?:,\d+)?)/);
-      const timeMatch = signUpBonus.match(/(\d+)\s+months?/);
-      
-      if (!spendingMatch || !timeMatch) continue;
-      
-      const spendingRequirement = parseInt(spendingMatch[1].replace(',', ''));
-      const timeframe = parseInt(timeMatch[1]);
-      
-      // Check if the 3-month window spending can meet the requirement
-      if (windowSpending >= spendingRequirement && timeframe <= 3) {
-        // Extract bonus amount for scoring
-        const bonusMatch = signUpBonus.match(/\$(\d+(?:,\d+)?)\s+(?:bonus|back|cash)/i);
-        const pointsMatch = signUpBonus.match(/(\d+(?:,\d+)?)\s+(?:bonus\s+)?(?:points|miles)/i);
+      for (const [cardName, cardData] of availableCards) {
+        const signUpBonus = (cardData as Record<string, unknown>).signUpBonus as string || '';
+        const rewards = (cardData as Record<string, unknown>).rewards as Array<Record<string, unknown>> || [];
+        const credits = (cardData as Record<string, unknown>).credits as Array<Record<string, unknown>> || [];
         
-        let bonusValue = 0;
-        if (bonusMatch) {
-          bonusValue = parseInt(bonusMatch[1].replace(',', ''));
-        } else if (pointsMatch) {
-          // Estimate points value (typically 1-2 cents per point)
-          bonusValue = parseInt(pointsMatch[1].replace(',', '')) * 0.015;
-        }
+        // Extract spending requirement from sign-up bonus text
+        const spendingMatch = signUpBonus.match(/\$(\d+(?:,\d+)?)/);
+        const timeMatch = signUpBonus.match(/(\d+)\s+months?/);
         
-        // Score based on bonus value and how well spending fits requirement
-        const utilizationRatio = Math.min(windowSpending / spendingRequirement, 2); // Cap at 2x
-        const score = bonusValue * utilizationRatio;
+        if (!spendingMatch || !timeMatch) continue;
         
-        if (!bestCard || score > bestCard.score) {
-          bestCard = {
-            name: cardName,
-            details: cardData as Record<string, unknown>,
-            score,
-            spendingReq: spendingRequirement
-          };
+        const spendingRequirement = parseInt(spendingMatch[1].replace(',', ''));
+        const timeframe = parseInt(timeMatch[1]);
+        
+        // Check if the window spending can meet the requirement
+        if (windowSpending >= spendingRequirement * 0.7 && timeframe <= 6) { // More flexible for all cards
+          // Calculate sign-up bonus value
+          const bonusMatch = signUpBonus.match(/\$(\d+(?:,\d+)?)\s+(?:bonus|back|cash)/i);
+          const pointsMatch = signUpBonus.match(/(\d+(?:,\d+)?)\s+(?:bonus\s+)?(?:points|miles)/i);
+          
+          let signUpBonusValue = 0;
+          if (bonusMatch) {
+            signUpBonusValue = parseInt(bonusMatch[1].replace(',', ''));
+          } else if (pointsMatch) {
+            // Estimate points value (1.5-2.5 cents per point depending on card)
+            const pointMultiplier = cardName.includes('SAPPHIRE') || cardName.includes('VENTURE') ? 0.025 : 0.015;
+            signUpBonusValue = parseInt(pointsMatch[1].replace(',', '')) * pointMultiplier;
+          }
+          
+          // Calculate ongoing rewards value for the spending window
+          let ongoingRewardsValue = 0;
+          windowTransactions.forEach(transaction => {
+            const transactionAmount = Math.abs(transaction.amount);
+            const transactionCategory = (transaction.category || '').toLowerCase();
+            
+            // Find best reward multiplier for this transaction
+            let bestMultiplier = 1; // Default catch-all
+            
+            rewards.forEach(reward => {
+              const rewardCategory = (reward.category as string) || '';
+              const multiplier = (reward.multiplier as number) || 1;
+              
+              // Simple category matching
+              if (
+                (rewardCategory.includes('dining') && (transactionCategory.includes('food') || transactionCategory.includes('dining'))) ||
+                (rewardCategory.includes('grocery') && transactionCategory.includes('groceries')) ||
+                (rewardCategory.includes('travel') && transactionCategory.includes('transportation')) ||
+                (rewardCategory.includes('gas') && transactionCategory.includes('transportation')) ||
+                (rewardCategory.includes('streaming') && transactionCategory.includes('subscriptions')) ||
+                (rewardCategory.includes('entertainment') && transactionCategory.includes('entertainment')) ||
+                (rewardCategory === 'catch_all_general_purchases')
+              ) {
+                if (multiplier > bestMultiplier || rewardCategory === 'catch_all_general_purchases') {
+                  bestMultiplier = multiplier;
+                }
+              }
+            });
+            
+            // Convert points/miles to cash value
+            const pointValue = cardName.includes('SAPPHIRE') || cardName.includes('VENTURE') ? 0.02 : 0.01;
+            ongoingRewardsValue += transactionAmount * (bestMultiplier - 1) * pointValue;
+          });
+          
+          // Calculate annual credits value (prorated for 3 months)
+          let annualCreditsValue = 0;
+          credits.forEach(credit => {
+            const annualCredit = credit.annualCredit as number;
+            if (annualCredit && typeof annualCredit === 'number') {
+              annualCreditsValue += annualCredit * 0.25; // 3 months = 1/4 year
+            }
+          });
+          
+          // Total value calculation
+          const totalValue = signUpBonusValue + ongoingRewardsValue + annualCreditsValue;
+          
+          // Enhanced scoring based on total value and large transaction optimization
+          const utilizationRatio = Math.min(windowSpending / spendingRequirement, 1.5);
+          const largeTransactionBonus = largeTransactionsInWindow.length * 100; // Higher bonus for large transactions
+          const timingBonus = monthsBefore === 1 ? 200 : (monthsBefore === 2 ? 100 : 50);
+          const valueBonus = totalValue * 2; // Emphasize total value
+          
+          const score = (totalValue * utilizationRatio) + largeTransactionBonus + timingBonus + valueBonus;
+          
+          if (!bestCard || score > bestCard.score) {
+            bestCard = {
+              name: cardName,
+              details: cardData as Record<string, unknown>,
+              score,
+              spendingReq: spendingRequirement,
+              totalValue
+            };
+          }
         }
       }
+      
+      // Store this opportunity for later selection
+      if (bestCard && windowSpending >= bestCard.spendingReq * 0.7) {
+        const year = potentialOpeningDate.getFullYear().toString();
+        if (!yearlyOpportunities[year]) {
+          yearlyOpportunities[year] = [];
+        }
+        
+        yearlyOpportunities[year].push({
+          date: potentialOpeningDate,
+          largeTransaction,
+          windowSpending,
+          largeTransactionsInWindow,
+          monthsBefore,
+          bestCard
+        });
+      }
     }
+  });
+  
+  // Second pass: select best 2 opportunities per year
+  Object.entries(yearlyOpportunities).forEach(([year, opportunities]) => {
+    // Sort opportunities by total value (descending)
+    opportunities.sort((a, b) => (b.bestCard?.totalValue || 0) - (a.bestCard?.totalValue || 0));
     
-    // If we found a good card opportunity, add it as a milestone
-    if (bestCard && windowSpending >= bestCard.spendingReq * 0.8) { // At least 80% of requirement
-      const confidence = Math.min(windowSpending / bestCard.spendingReq, 1.5) * 0.67; // Max 100% confidence
+    // Take top 2 opportunities for this year
+    const selectedOpportunities = opportunities.slice(0, 2);
+    
+    console.log(`📅 [Milestones] Year ${year}: Selected ${selectedOpportunities.length} opportunities from ${opportunities.length} candidates`);
+    
+    selectedOpportunities.forEach((opportunity, index) => {
+      const { date: potentialOpeningDate, largeTransaction, windowSpending, largeTransactionsInWindow, monthsBefore, bestCard } = opportunity;
       
-      // Determine optimal opening date (start of the high-spending period)
-      const milestoneDate = currentMonth + '-01';
+      if (!bestCard) return;
       
-      // Create reasoning
-      const reasoning = `High spending period detected ($${windowSpending.toFixed(0)} over 3 months). ` +
-        `Opening ${bestCard.name.replace(/_/g, ' ')} now allows you to meet the $${bestCard.spendingReq} ` +
-        `spending requirement naturally while earning the sign-up bonus. ` +
-        `${monthsSinceLastOpening === Infinity ? 'First card recommendation.' : 
-          `${monthsSinceLastOpening.toFixed(0)} months since last opening (good spacing).`}`;
+      // Higher confidence for large transaction timing and total value
+      const baseConfidence = Math.min(windowSpending / bestCard.spendingReq, 1.5) * 0.8;
+      const largeTransactionConfidenceBonus = largeTransactionsInWindow.length * 0.1;
+      const valueConfidenceBonus = Math.min(bestCard.totalValue / 1000, 0.2); // Up to 20% bonus for high value
+      const confidence = Math.min(baseConfidence + largeTransactionConfidenceBonus + valueConfidenceBonus, 1.0);
+      
+      // Format the milestone date
+      const milestoneDate = potentialOpeningDate.toISOString().split('T')[0];
+      
+      // Create detailed reasoning focused on total value and large transactions
+      const largeTransactionDetails = largeTransactionsInWindow
+        .map(t => `$${Math.abs(t.amount).toFixed(0)} (${t.description})`)
+        .slice(0, 3) // Show up to 3 large transactions
+        .join(', ');
+      
+      const reasoning = `💰 High-value opportunity (${index + 1}/2 for ${year})! Opening ${bestCard.name.replace(/_/g, ' ')} ` +
+        `${monthsBefore} month${monthsBefore > 1 ? 's' : ''} before major spending maximizes value: ` +
+        `$${bestCard.totalValue.toFixed(0)} total value ($${windowSpending.toFixed(0)} spending, ` +
+        `${(windowSpending / bestCard.spendingReq * 100).toFixed(0)}% of requirement). ` +
+        `Key transactions: ${largeTransactionDetails}. ` +
+        `Includes sign-up bonus + ongoing rewards + credits.`;
       
       milestones.push({
         date: milestoneDate,
@@ -1699,20 +1816,23 @@ function analyzeCardOpeningMilestones(transactions: FallbackTransaction[]): Card
         confidence
       });
       
-      // Track this card opening
+      // Track this card opening for spacing calculations
       cardOpenings.push({
         date: new Date(milestoneDate),
         card: bestCard.name
       });
       
-      console.log(`🎯 [Milestones] Added milestone for ${bestCard.name} on ${milestoneDate}:`, {
+      console.log(`🎯 [Milestones] Added high-value milestone for ${bestCard.name} on ${milestoneDate}:`, {
+        totalValue: bestCard.totalValue.toFixed(0),
         spendingRequirement: bestCard.spendingReq,
         upcomingSpending: windowSpending,
+        largeTransactions: largeTransactionsInWindow.length,
+        monthsBeforeLargeTransaction: monthsBefore,
         confidence: confidence.toFixed(2),
-        monthsSinceLastOpening: monthsSinceLastOpening === Infinity ? 'N/A' : monthsSinceLastOpening.toFixed(0)
+        yearlyRank: index + 1
       });
-    }
-  }
+    });
+  });
   
   console.log(`✅ [Milestones] Generated ${milestones.length} card opening milestones`);
   return milestones;
