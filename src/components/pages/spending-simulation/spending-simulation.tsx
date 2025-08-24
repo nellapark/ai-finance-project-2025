@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import SpendingSimulationGraph from './components/spending-simulation-graph';
 import BankConnectModal from './components/bank-connect-modal';
 import DebtInsights from './components/debt-insights';
@@ -809,6 +810,15 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
               </p>
             </div>
             <div className="mt-4 sm:mt-0 flex gap-3">
+              <Link
+                href="/business-search"
+                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                Business Search
+              </Link>
               <button
                 onClick={handleTestingMode}
                 disabled={isAnalyzing}
@@ -819,7 +829,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                 </svg>
                 {isAnalyzing ? 'Loading...' : 'Test Mode'}
               </button>
-              <button
+              {/* <button
                 onClick={handleGenerateTestData}
                 disabled={isAnalyzing}
                 className="inline-flex items-center px-4 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -828,7 +838,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
                 Quick Test
-              </button>
+              </button> */}
               <button
                 onClick={handleConnectBanks}
                 disabled={isAnalyzing}
