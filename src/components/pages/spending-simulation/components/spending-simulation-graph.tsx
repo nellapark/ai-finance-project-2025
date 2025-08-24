@@ -119,25 +119,33 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .range([innerHeight, 0]);
 
     // Add X axis
-    g.append('g')
+    const xAxis = g.append('g')
       .attr('transform', `translate(0,${innerHeight})`)
-      .call(d3.axisBottom(xScale).tickFormat(d3.timeFormat('%b %Y') as (domainValue: Date | d3.NumberValue, index: number) => string))
-      .append('text')
+      .call(d3.axisBottom(xScale).tickFormat(d3.timeFormat('%b %Y') as (domainValue: Date | d3.NumberValue, index: number) => string));
+    
+    xAxis.selectAll('text')
+      .style('fill', 'black');
+    
+    xAxis.append('text')
       .attr('x', innerWidth / 2)
       .attr('y', 35)
-      .attr('fill', 'currentColor')
+      .attr('fill', 'black')
       .style('text-anchor', 'middle')
       .style('font-size', '12px')
       .text('Time');
 
     // Add Y axis
-    g.append('g')
-      .call(d3.axisLeft(yScale).tickFormat(d3.format('$,.0f')))
-      .append('text')
+    const yAxis = g.append('g')
+      .call(d3.axisLeft(yScale).tickFormat(d3.format('$,.0f')));
+    
+    yAxis.selectAll('text')
+      .style('fill', 'black');
+    
+    yAxis.append('text')
       .attr('transform', 'rotate(-90)')
       .attr('y', -40)
       .attr('x', -innerHeight / 2)
-      .attr('fill', 'currentColor')
+      .attr('fill', 'black')
       .style('text-anchor', 'middle')
       .style('font-size', '12px')
       .text(isCumulative ? 'Cumulative Spending ($)' : 'Transaction Amount ($)');
@@ -185,14 +193,18 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
           .range([innerHeight, 0]);
 
         // Add right Y axis for points
-        g.append('g')
+        const pointsYAxis = g.append('g')
           .attr('transform', `translate(${innerWidth},0)`)
-          .call(d3.axisRight(pointsYScale).tickFormat(d3.format(',.0f')))
-          .append('text')
+          .call(d3.axisRight(pointsYScale).tickFormat(d3.format(',.0f')));
+        
+        pointsYAxis.selectAll('text')
+          .style('fill', 'black');
+        
+        pointsYAxis.append('text')
           .attr('transform', 'rotate(-90)')
           .attr('y', 40)
           .attr('x', -innerHeight / 2)
-          .attr('fill', 'currentColor')
+          .attr('fill', 'black')
           .style('text-anchor', 'middle')
           .style('font-size', '12px')
           .text('Reward Points');
@@ -207,9 +219,8 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
         g.append('path')
           .datum(dataWithCumulativePoints)
           .attr('fill', 'none')
-          .attr('stroke', '#10b981')
+          .attr('stroke', '#6b46c1')
           .attr('stroke-width', 2)
-          .attr('stroke-dasharray', '5,5')
           .attr('d', optimalLine)
           .attr('class', 'optimal-points-line');
 
@@ -258,7 +269,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
           .attr('y', 0)
           .attr('dy', '0.35em')
           .style('font-size', '12px')
-          .attr('fill', 'currentColor')
+          .attr('fill', 'black')
           .text('Spending');
 
         // Optimal points legend
@@ -267,16 +278,15 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
           .attr('x2', 20)
           .attr('y1', 20)
           .attr('y2', 20)
-          .attr('stroke', '#10b981')
-          .attr('stroke-width', 2)
-          .attr('stroke-dasharray', '5,5');
+          .attr('stroke', '#6b46c1')
+          .attr('stroke-width', 2);
 
         legend.append('text')
           .attr('x', 25)
           .attr('y', 20)
           .attr('dy', '0.35em')
           .style('font-size', '12px')
-          .attr('fill', 'currentColor')
+          .attr('fill', 'black')
           .text('Optimal Points');
 
         // Actual points legend
@@ -293,7 +303,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
           .attr('y', 40)
           .attr('dy', '0.35em')
           .style('font-size', '12px')
-          .attr('fill', 'currentColor')
+          .attr('fill', 'black')
           .text('Actual Points');
       }
     }
@@ -705,8 +715,9 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       legend.append('text')
         .attr('x', 25)
         .attr('y', legendY + 5)
-        .style('font-size', '12px')
-        .text('Cumulative Spending');
+              .style('font-size', '12px')
+      .attr('fill', 'black')
+      .text('Cumulative Spending');
       
       legendY += 20;
     }
@@ -725,6 +736,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .attr('x', 25)
       .attr('y', legendY + 5)
       .style('font-size', '12px')
+      .attr('fill', 'black')
       .text('One-time Transactions');
 
     legendY += 20;
@@ -743,6 +755,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .attr('x', 25)
       .attr('y', legendY + 5)
       .style('font-size', '12px')
+      .attr('fill', 'black')
       .text('Recurring Transactions');
 
     legendY += 20;
@@ -760,6 +773,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .attr('x', 25)
       .attr('y', legendY + 5)
       .style('font-size', '12px')
+      .attr('fill', 'black')
       .text(`Statistical Outliers (>${largeTransactionThreshold.toFixed(0)})`);
 
     // Cleanup tooltip and adjustment elements on component unmount

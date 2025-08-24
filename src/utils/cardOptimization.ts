@@ -146,14 +146,21 @@ export function getActualPointsForTransaction(
   amount: number
 ): number {
   if (!cardUsed || !cardDetails[cardUsed as keyof typeof cardDetails]) {
-    return Math.abs(amount) * 1; // Default 1x points
+    // For unidentifiable cards, use 1x points for catch-all category
+    return Math.abs(amount) * 1;
   }
 
   const cardData = cardDetails[cardUsed as keyof typeof cardDetails] as CardDetails;
   const matchingReward = cardData.rewards.find(reward => reward.category === rewardCategory);
   
-  const multiplier = matchingReward ? matchingReward.multiplier : 1;
-  return Math.abs(amount) * multiplier;
+  // If no matching reward category, use catch-all category (1x for most cards)
+  if (!matchingReward) {
+    const catchAllReward = cardData.rewards.find(reward => reward.category === 'catch_all_general_purchases');
+    const multiplier = catchAllReward ? catchAllReward.multiplier : 1;
+    return Math.abs(amount) * multiplier;
+  }
+  
+  return Math.abs(amount) * matchingReward.multiplier;
 }
 
 /**

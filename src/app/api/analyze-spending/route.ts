@@ -387,6 +387,11 @@ IMPORTANT: Generate ONLY credit card transactions. Do not include:
 - Bank transfers or direct debits
 - Loan payments or debt payments
 
+CRITICAL CREDIT CARD REQUIREMENT:
+- ALL simulated transactions MUST use either "AMEX_GOLD" or "AMEX_BLUE_CASH_PREFERRED" as the credit card
+- Distribute transactions roughly 60% AMEX_GOLD and 40% AMEX_BLUE_CASH_PREFERRED
+- Choose the card based on category optimization when possible (e.g., AMEX_GOLD for dining/grocery, AMEX_BLUE_CASH_PREFERRED for gas/streaming)
+
 PATTERN RECOGNITION FRAMEWORK:
 Use these examples to understand how to identify and simulate different spending patterns:
 
@@ -444,7 +449,8 @@ Return your response as valid JSON with this exact structure:
       "type": "Debit",
       "confidence": 0.75,
       "isRecurring": false,
-      "recurringPattern": null
+      "recurringPattern": null,
+      "credit_card": "AMEX_GOLD"
     },
     {
       "date": "2024-07-08",
@@ -455,7 +461,8 @@ Return your response as valid JSON with this exact structure:
       "type": "Debit",
       "confidence": 0.95,
       "isRecurring": true,
-      "recurringPattern": "monthly"
+      "recurringPattern": "monthly",
+      "credit_card": "AMEX_BLUE_CASH_PREFERRED"
     },
     {
       "date": "2024-07-12",
@@ -466,7 +473,8 @@ Return your response as valid JSON with this exact structure:
       "type": "Debit",
       "confidence": 0.70,
       "isRecurring": false,
-      "recurringPattern": null
+      "recurringPattern": null,
+      "credit_card": "AMEX_BLUE_CASH_PREFERRED"
     }
   ],
   "patterns": {
@@ -877,6 +885,7 @@ interface FallbackTransaction {
   confidence: number;
   isRecurring: boolean;
   recurringPattern: string | null;
+  credit_card: string;
 }
 
 function generateFallbackTransactions(_transactionData: TransactionDataInput[], _debtData: DebtDataInput[], _detectedAdjustments?: SimulationAdjustments): FallbackTransaction[] {
@@ -884,6 +893,23 @@ function generateFallbackTransactions(_transactionData: TransactionDataInput[], 
   
   const transactions: FallbackTransaction[] = [];
   const startDate = new Date('2024-07-01');
+  
+  // Helper function to randomly select between the two AMEX cards
+  const getRandomAmexCard = () => {
+    return Math.random() < 0.6 ? 'AMEX_GOLD' : 'AMEX_BLUE_CASH_PREFERRED';
+  };
+  
+  // Helper function to get optimal card for category
+  const getOptimalCardForCategory = (category: string) => {
+    const lowerCategory = category.toLowerCase();
+    if (lowerCategory.includes('grocery') || lowerCategory.includes('food') || lowerCategory.includes('dining')) {
+      return 'AMEX_GOLD'; // 4x on groceries and dining
+    }
+    if (lowerCategory.includes('gas') || lowerCategory.includes('streaming') || lowerCategory.includes('subscription')) {
+      return 'AMEX_BLUE_CASH_PREFERRED'; // 3x on gas, 6x on streaming
+    }
+    return getRandomAmexCard(); // Default to random selection
+  };
   
   // Generate 12 months of transactions
   for (let month = 0; month < 12; month++) {
@@ -903,7 +929,8 @@ function generateFallbackTransactions(_transactionData: TransactionDataInput[], 
       type: 'Debit',
       confidence: 0.85,
       isRecurring: true,
-      recurringPattern: 'monthly'
+      recurringPattern: 'monthly',
+      credit_card: getOptimalCardForCategory('Utilities')
     });
     
     // Generate weekly groceries (4 per month)
@@ -919,7 +946,8 @@ function generateFallbackTransactions(_transactionData: TransactionDataInput[], 
         type: 'Debit',
         confidence: 0.75,
         isRecurring: false,
-        recurringPattern: null
+        recurringPattern: null,
+        credit_card: getOptimalCardForCategory('Groceries')
       });
     }
     
@@ -936,7 +964,8 @@ function generateFallbackTransactions(_transactionData: TransactionDataInput[], 
         type: 'Debit',
         confidence: 0.70,
         isRecurring: false,
-        recurringPattern: null
+        recurringPattern: null,
+        credit_card: getOptimalCardForCategory('Transportation')
       });
     }
     
@@ -953,7 +982,8 @@ function generateFallbackTransactions(_transactionData: TransactionDataInput[], 
         type: 'Debit',
         confidence: 0.60,
         isRecurring: false,
-        recurringPattern: null
+        recurringPattern: null,
+        credit_card: getOptimalCardForCategory('Food & Dining')
       });
     }
     
@@ -978,7 +1008,8 @@ function generateFallbackTransactions(_transactionData: TransactionDataInput[], 
             type: 'Debit',
             confidence: 0.90,
             isRecurring: true,
-            recurringPattern: index < 2 ? 'monthly' : 'quarterly'
+            recurringPattern: index < 2 ? 'monthly' : 'quarterly',
+            credit_card: getOptimalCardForCategory('Subscriptions')
           });
         }
       });
@@ -1000,7 +1031,8 @@ function generateFallbackTransactions(_transactionData: TransactionDataInput[], 
         type: 'Debit',
         confidence: 0.50,
         isRecurring: false,
-        recurringPattern: null
+        recurringPattern: null,
+        credit_card: getOptimalCardForCategory(categories[i % categories.length])
       });
     }
   }
@@ -1059,7 +1091,8 @@ async function readExistingCSV(): Promise<FallbackTransaction[]> {
         type: values[5].replace(/"/g, ''),
         confidence: parseFloat(values[6]) || 0,
         isRecurring: values[7].toLowerCase() === 'true',
-        recurringPattern: values[8].replace(/"/g, '') || null
+        recurringPattern: values[8].replace(/"/g, '') || null,
+        credit_card: values[9] ? values[9].replace(/"/g, '') : 'AMEX_GOLD' // Default to AMEX_GOLD if not specified
       });
     }
   }
