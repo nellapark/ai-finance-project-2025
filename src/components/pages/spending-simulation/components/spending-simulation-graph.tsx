@@ -228,10 +228,21 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
           .attr('d', actualLine)
           .attr('class', 'actual-points-line');
 
-        // Add legend for reward lines
+        // Add legend for reward lines (positioned on the left to avoid overlap)
         const legend = g.append('g')
           .attr('class', 'reward-legend')
-          .attr('transform', `translate(${innerWidth - 200}, 20)`);
+          .attr('transform', `translate(20, 20)`);
+
+        // Add background for better visibility
+        legend.append('rect')
+          .attr('x', -10)
+          .attr('y', -10)
+          .attr('width', 140)
+          .attr('height', 70)
+          .attr('fill', 'rgba(255, 255, 255, 0.9)')
+          .attr('stroke', '#e5e7eb')
+          .attr('stroke-width', 1)
+          .attr('rx', 4);
 
         // Spending line legend
         legend.append('line')
@@ -667,6 +678,17 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
     const legend = svg.append('g')
       .attr('class', 'legend')
       .attr('transform', `translate(${width - 200}, 20)`);
+
+    // Add background for better visibility
+    const legendBackground = legend.append('rect')
+      .attr('x', -10)
+      .attr('y', -5)
+      .attr('width', 190)
+      .attr('height', 100)
+      .attr('fill', 'rgba(255, 255, 255, 0.9)')
+      .attr('stroke', '#e5e7eb')
+      .attr('stroke-width', 1)
+      .attr('rx', 4);
 
     let legendY = 10;
 

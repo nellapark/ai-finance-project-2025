@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import SpendingSimulationGraph from './components/spending-simulation-graph';
 import BankConnectModal from './components/bank-connect-modal';
 import type { DataPoint } from './components/spending-simulation-graph';
@@ -119,7 +119,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
   const [highlightedAdjustment, setHighlightedAdjustment] = useState<string | null>(null); // For hover
   const [toggledAdjustments, setToggledAdjustments] = useState<Set<string>>(new Set()); // For persistent toggle
   const [showAdjustmentDataPoints, setShowAdjustmentDataPoints] = useState<boolean>(true); // Toggle for showing/hiding adjustment data points
-  const [showRewardOptimization, setShowRewardOptimization] = useState<boolean>(false); // Toggle for reward optimization view
+  const [showRewardOptimization, setShowRewardOptimization] = useState<boolean>(true); // Toggle for reward optimization view
   const [optimizationSummary, setOptimizationSummary] = useState<{
     totalOptimalPoints: number;
     totalActualPoints: number;
@@ -128,6 +128,32 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
     nonOptimalTransactions: number;
     totalTransactions: number;
   } | null>(null); // Optimization summary from API
+  
+  // Sidebar tab state
+  const [activeTab, setActiveTab] = useState<'adjustments' | 'rewards'>('adjustments');
+  const [isSidebarVisible, setIsSidebarVisible] = useState<boolean>(true);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  // Handle escape key for fullscreen
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+
+    if (isFullscreen) {
+      document.addEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'hidden'; // Prevent background scrolling
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isFullscreen]);
 
   const handleConnectBanks = () => {
     setIsModalOpen(true);
@@ -707,7 +733,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
 
   return (
     <div className={`spending-simulation ${className}`}>
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-2 py-6">
         {/* Header Section */}
         <header className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
@@ -827,319 +853,71 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                 <p className="text-gray-600">
                   Our AI is processing your transaction history and debt information to create personalized spending projections...
                 </p>
-              </div>
-            </section>
+                </div>
+              </section>
           ) : hasConnectedData ? (
-            <>
-              {/* Detected Adjustments Section */}
-              {detectedAdjustments && hasAnyAdjustments(detectedAdjustments) && (
-                <section className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
-                  <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                    Detected Simulation Adjustments
-                  </h2>
-                  <p className="text-gray-600 mb-6">
-                    Based on your transaction history, we&apos;ve detected the following factors affecting your spending simulation.
-                  </p>
-                  
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Life Events */}
-                    {Object.entries(detectedAdjustments.lifeEvents || {}).filter(([, active]) => active).length > 0 && (
-                      <div className="space-y-4">
-                        <h3 className="font-semibold text-gray-800 flex items-center">
-                          <svg className="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          Life Events
-                        </h3>
-                        <div className="space-y-3">
-                          {Object.entries(detectedAdjustments.lifeEvents || {})
-                            .filter(([, active]) => active)
-                            .map(([key]) => {
-                              const info = getAdjustmentDisplayInfo('lifeEvents', key);
-                              const isToggled = toggledAdjustments.has(key);
-                              return (
-                                <div 
-                                  key={key} 
-                                  className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
-                                    isToggled 
-                                      ? 'bg-blue-200 border-blue-400 shadow-md ring-2 ring-blue-300' 
-                                      : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
-                                  }`}
-                                  onMouseEnter={() => setHighlightedAdjustment(key)}
-                                  onMouseLeave={() => setHighlightedAdjustment(null)}
-                                  onClick={() => handleAdjustmentToggle(key)}
-                                >
-                                  <div className="flex items-center space-x-2">
-                                    <span className="text-lg">{info.icon}</span>
-                                    {isToggled && (
-                                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
-                                    )}
-                                  </div>
-                                  <div className="flex-1">
-                                    <div className={`font-medium ${isToggled ? 'text-blue-950' : 'text-blue-900'}`}>
-                                      {info.label}
-                                      {isToggled && <span className="ml-2 text-xs bg-blue-600 text-white px-2 py-1 rounded-full">ACTIVE</span>}
-                                    </div>
-                                    <div className={`text-sm ${isToggled ? 'text-blue-800' : 'text-blue-700'}`}>
-                                      {info.description}
-                                    </div>
-                                    <div className="text-xs text-blue-600 mt-1">
-                                      {isToggled ? 'Click to hide in graph' : 'Click to highlight in graph'}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
+            <div className={`flex ${isSidebarVisible ? 'gap-4' : 'gap-0'}`}>
+              {/* Main Content Area */}
+              <div className="flex-1">
+                {/* Graph Section */}
+                <section className={`bg-gray-50 rounded-lg p-4 ${isFullscreen ? 'fixed inset-0 z-50 m-0 rounded-none' : ''}`}>
+                  <div className="flex justify-between items-center mb-4">
+                    <div>
+                      <h2 className="text-xl font-semibold text-gray-800">
+                        Your Spending Projection
+                </h2>
+                      {toggledAdjustments.size > 0 && (
+                        <div className="flex items-center space-x-2 mt-1">
+                          <span className="text-sm text-gray-600">Highlighting:</span>
+                          {Array.from(toggledAdjustments).map(adjustment => {
+                            const info = getAdjustmentDisplayInfo('', adjustment);
+                            return (
+                              <span 
+                                key={adjustment}
+                                className="inline-flex items-center space-x-1 px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full"
+                              >
+                                <span>{info.icon}</span>
+                                <span>{info.label}</span>
+                              </span>
+                            );
+                          })}
                         </div>
-                      </div>
-                    )}
-
-                    {/* Behavioral Changes */}
-                    {Object.entries(detectedAdjustments.behavioralChanges || {}).filter(([, active]) => active).length > 0 && (
-                      <div className="space-y-4">
-                        <h3 className="font-semibold text-gray-800 flex items-center">
-                          <svg className="w-5 h-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                          </svg>
-                          Behavioral Changes
-                        </h3>
-                        <div className="space-y-3">
-                          {Object.entries(detectedAdjustments.behavioralChanges || {})
-                            .filter(([, active]) => active)
-                            .map(([key]) => {
-                              const info = getAdjustmentDisplayInfo('behavioralChanges', key);
-                              const isToggled = toggledAdjustments.has(key);
-                              return (
-                                <div 
-                                  key={key} 
-                                  className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
-                                    isToggled 
-                                      ? 'bg-green-200 border-green-400 shadow-md ring-2 ring-green-300' 
-                                      : 'bg-green-50 border-green-200 hover:bg-green-100'
-                                  }`}
-                                  onMouseEnter={() => setHighlightedAdjustment(key)}
-                                  onMouseLeave={() => setHighlightedAdjustment(null)}
-                                  onClick={() => handleAdjustmentToggle(key)}
-                                >
-                                  <div className="flex items-center space-x-2">
-                                    <span className="text-lg">{info.icon}</span>
-                                    {isToggled && (
-                                      <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse"></div>
-                                    )}
-                                  </div>
-                                  <div className="flex-1">
-                                    <div className={`font-medium ${isToggled ? 'text-green-950' : 'text-green-900'}`}>
-                                      {info.label}
-                                      {isToggled && <span className="ml-2 text-xs bg-green-600 text-white px-2 py-1 rounded-full">ACTIVE</span>}
-                                    </div>
-                                    <div className={`text-sm ${isToggled ? 'text-green-800' : 'text-green-700'}`}>
-                                      {info.description}
-                                    </div>
-                                    <div className="text-xs text-green-600 mt-1">
-                                      {isToggled ? 'Click to hide in graph' : 'Click to highlight in graph'}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* External Factors */}
-                    {Object.entries(detectedAdjustments.externalFactors || {}).filter(([, active]) => active).length > 0 && (
-                      <div className="space-y-4">
-                        <h3 className="font-semibold text-gray-800 flex items-center">
-                          <svg className="w-5 h-5 mr-2 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          External Factors
-                        </h3>
-                        <div className="space-y-3">
-                          {Object.entries(detectedAdjustments.externalFactors || {})
-                            .filter(([, active]) => active)
-                            .map(([key]) => {
-                              const info = getAdjustmentDisplayInfo('externalFactors', key);
-                              const isToggled = toggledAdjustments.has(key);
-                              return (
-                                <div 
-                                  key={key} 
-                                  className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
-                                    isToggled 
-                                      ? 'bg-orange-200 border-orange-400 shadow-md ring-2 ring-orange-300' 
-                                      : 'bg-orange-50 border-orange-200 hover:bg-orange-100'
-                                  }`}
-                                  onMouseEnter={() => setHighlightedAdjustment(key)}
-                                  onMouseLeave={() => setHighlightedAdjustment(null)}
-                                  onClick={() => handleAdjustmentToggle(key)}
-                                >
-                                  <div className="flex items-center space-x-2">
-                                    <span className="text-lg">{info.icon}</span>
-                                    {isToggled && (
-                                      <div className="w-2 h-2 bg-orange-600 rounded-full animate-pulse"></div>
-                                    )}
-                                  </div>
-                                  <div className="flex-1">
-                                    <div className={`font-medium ${isToggled ? 'text-orange-950' : 'text-orange-900'}`}>
-                                      {info.label}
-                                      {isToggled && <span className="ml-2 text-xs bg-orange-600 text-white px-2 py-1 rounded-full">ACTIVE</span>}
-                                    </div>
-                                    <div className={`text-sm ${isToggled ? 'text-orange-800' : 'text-orange-700'}`}>
-                                      {info.description}
-                                    </div>
-                                    <div className="text-xs text-orange-600 mt-1">
-                                      {isToggled ? 'Click to hide in graph' : 'Click to highlight in graph'}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Show message if no adjustments detected */}
-                  {(!detectedAdjustments.lifeEvents || Object.values(detectedAdjustments.lifeEvents).every(v => !v)) &&
-                   (!detectedAdjustments.behavioralChanges || Object.values(detectedAdjustments.behavioralChanges).every(v => !v)) &&
-                   (!detectedAdjustments.externalFactors || Object.values(detectedAdjustments.externalFactors).every(v => !v)) && (
-                    <div className="text-center py-8">
-                      <div className="text-gray-500 mb-2">
-                        <svg className="w-12 h-12 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <p className="text-gray-600">
-                        No specific life events or behavioral changes detected. Using standard spending patterns with inflation and seasonal adjustments.
-                      </p>
+                      )}
                     </div>
-                  )}
-                </section>
-              )}
-
-              {/* Reward Optimization Summary Section */}
-              {optimizationSummary && (
-                <section className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
-                  <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                    💳 Credit Card Reward Optimization
-                  </h2>
-                  <p className="text-gray-600 mb-6">
-                    Analysis of your credit card usage and potential reward optimization opportunities.
-                  </p>
-                  
-                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                    {/* Total Points Earned */}
-                    <div className="bg-blue-50 rounded-lg p-4">
-                      <div className="text-2xl font-bold text-blue-600">
-                        {optimizationSummary.totalActualPoints?.toLocaleString() || '0'}
-                      </div>
-                      <div className="text-sm text-blue-800 font-medium">Points Earned</div>
-                      <div className="text-xs text-blue-600 mt-1">With current cards</div>
-                    </div>
-
-                    {/* Potential Points */}
-                    <div className="bg-green-50 rounded-lg p-4">
-                      <div className="text-2xl font-bold text-green-600">
-                        {optimizationSummary.totalOptimalPoints?.toLocaleString() || '0'}
-                      </div>
-                      <div className="text-sm text-green-800 font-medium">Potential Points</div>
-                      <div className="text-xs text-green-600 mt-1">With optimal cards</div>
-                    </div>
-
-                    {/* Points Lost */}
-                    <div className="bg-orange-50 rounded-lg p-4">
-                      <div className="text-2xl font-bold text-orange-600">
-                        {optimizationSummary.pointsLost?.toLocaleString() || '0'}
-                      </div>
-                      <div className="text-sm text-orange-800 font-medium">Points Lost</div>
-                      <div className="text-xs text-orange-600 mt-1">Missed opportunities</div>
-                    </div>
-
-                    {/* Optimization Rate */}
-                    <div className="bg-purple-50 rounded-lg p-4">
-                      <div className="text-2xl font-bold text-purple-600">
-                        {optimizationSummary.optimizationRate?.toFixed(1) || '0'}%
-                      </div>
-                      <div className="text-sm text-purple-800 font-medium">Optimization Rate</div>
-                      <div className="text-xs text-purple-600 mt-1">Current efficiency</div>
-                    </div>
-                  </div>
-
-                  {/* Non-optimal transactions indicator */}
-                  {optimizationSummary.nonOptimalTransactions > 0 && (
-                    <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      <div className="flex items-center">
-                        <div className="text-yellow-600 mr-2">⚠️</div>
-                        <div>
-                          <div className="font-medium text-yellow-800">
-                            {optimizationSummary.nonOptimalTransactions} of {optimizationSummary.totalTransactions} transactions used non-optimal cards
-                          </div>
-                          <div className="text-sm text-yellow-700 mt-1">
-                            Enable &quot;Rewards&quot; view in the graph to see which transactions could earn more points with different cards.
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </section>
-              )}
-
-              {/* Graph Section */}
-              <section className="bg-gray-50 rounded-lg p-6">
-                                <div className="flex justify-between items-center mb-4">
-                  <div>
-                    <h2 className="text-xl font-semibold text-gray-800">
-                      Your Spending Projection
-                    </h2>
-                    {toggledAdjustments.size > 0 && (
-                      <div className="flex items-center space-x-2 mt-1">
-                        <span className="text-sm text-gray-600">Highlighting:</span>
-                        {Array.from(toggledAdjustments).map(adjustment => {
-                          const info = getAdjustmentDisplayInfo('', adjustment);
-                          return (
-                            <span 
-                              key={adjustment}
-                              className="inline-flex items-center space-x-1 px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full"
-                            >
-                              <span>{info.icon}</span>
-                              <span>{info.label}</span>
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center space-x-6">
-                    {/* Animation Controls */}
-                    {(isAnimating || fullData.length > 0) && (
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={togglePause}
-                          disabled={!isAnimating}
-                          className="p-1 rounded-full bg-blue-100 hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {isPaused ? (
-                            <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                            </svg>
-                          ) : (
-                            <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                        </button>
-                        <button
-                          onClick={skipToEnd}
-                          disabled={!isAnimating}
-                          className="px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 text-blue-600 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          Skip
-                        </button>
-                      </div>
-                    )}
                     
                     {/* View Toggle */}
                     <div className="flex items-center space-x-6">
+                      {/* Sidebar Toggle */}
+                      <button
+                        onClick={() => setIsSidebarVisible(!isSidebarVisible)}
+                        className="flex items-center space-x-2 px-3 py-2 text-sm bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"
+                        title={isSidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          {isSidebarVisible ? (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                          ) : (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7M19 19l-7-7 7-7" />
+                          )}
+                        </svg>
+                        <span>{isSidebarVisible ? 'Hide Panel' : 'Show Panel'}</span>
+                      </button>
+
+                      {/* Fullscreen Toggle */}
+                      <button
+                        onClick={() => setIsFullscreen(!isFullscreen)}
+                        className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors"
+                        title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          {isFullscreen ? (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          ) : (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                          )}
+                        </svg>
+                        <span>{isFullscreen ? 'Exit' : 'Fullscreen'}</span>
+                      </button>
                       <div className="flex items-center space-x-3">
                         <span className="text-sm text-gray-600">Individual</span>
                         <button
@@ -1193,264 +971,351 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                               }`}
                             />
                           </button>
-                          <span className="text-sm text-gray-600">Show Adjustments</span>
-                        </div>
+                          <span className="text-sm text-gray-600">Show</span>
+                  </div>
                       )}
+                    </div>
+                  </div>
+
+                  {/* Graph Container */}
+                  <div className="bg-white rounded-lg border border-gray-200 p-2">
+                    {(() => {
+                      const baseData = isAnimating ? animatedData : (fullData.length > 0 ? fullData : graphData);
                       
-                      <div className="flex items-center space-x-4">
-                        <span className="text-sm text-gray-600 font-medium">Filter:</span>
-                        <label className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            checked={showRecurringOnly}
-                            onChange={(e) => {
-                              setShowRecurringOnly(e.target.checked);
-                              if (e.target.checked) setShowOneTimeOnly(false);
-                            }}
-                            className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                          />
-                          <span className="text-sm text-green-700">Recurring Only</span>
-                        </label>
-                        <label className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            checked={showOneTimeOnly}
-                            onChange={(e) => {
-                              setShowOneTimeOnly(e.target.checked);
-                              if (e.target.checked) setShowRecurringOnly(false);
-                            }}
-                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <span className="text-sm text-blue-700">One-time Only</span>
-                        </label>
-                      </div>
-                    </div>
+                      // Apply filters
+                      let currentData = baseData;
+                      if (showRecurringOnly) {
+                        currentData = currentData.filter(d => d.isRecurring);
+                      } else if (showOneTimeOnly) {
+                        currentData = currentData.filter(d => !d.isRecurring);
+                      }
+                      
+                      console.log('🎬 [Graph] Rendering with data:', {
+                        animatedDataLength: animatedData.length,
+                        fullDataLength: fullData.length,
+                        graphDataLength: graphData.length,
+                        baseDataLength: baseData.length,
+                        filteredDataLength: currentData.length,
+                        isCumulative,
+                        showRecurringOnly,
+                        showOneTimeOnly,
+                        sampleCurrentData: currentData.slice(0, 2)
+                      });
+                      return (
+                        <SpendingSimulationGraph
+                          data={currentData}
+                          width={isFullscreen ? window.innerWidth - 40 : 1200}
+                          height={isFullscreen ? window.innerHeight - 200 : 500}
+                          className="w-full min-w-full"
+                          isCumulative={isCumulative}
+                          highlightedAdjustment={highlightedAdjustment}
+                          toggledAdjustments={toggledAdjustments}
+                          showAdjustmentDataPoints={showAdjustmentDataPoints}
+                          showRewardOptimization={showRewardOptimization}
+                        />
+                      );
+                    })()}
                   </div>
-                </div>
-                <div className="w-full overflow-x-auto">
-                  {(() => {
-                    const baseData = isAnimating ? animatedData : (fullData.length > 0 ? fullData : graphData);
-                    const currentData = getFilteredData(baseData);
-                    console.log('📊 [Main] Passing data to graph:', {
-                      isAnimating,
-                      animatedDataLength: animatedData.length,
-                      fullDataLength: fullData.length,
-                      graphDataLength: graphData.length,
-                      baseDataLength: baseData.length,
-                      filteredDataLength: currentData.length,
-                      isCumulative,
-                      showRecurringOnly,
-                      showOneTimeOnly,
-                      sampleCurrentData: currentData.slice(0, 2)
-                    });
-                    return (
-                  <SpendingSimulationGraph
-                        data={currentData}
-                        width={1200}
-                        height={500}
-                        className="w-full min-w-full"
-                        isCumulative={isCumulative}
-                        highlightedAdjustment={highlightedAdjustment}
-                        toggledAdjustments={toggledAdjustments}
-                        showAdjustmentDataPoints={showAdjustmentDataPoints}
-                        showRewardOptimization={showRewardOptimization}
-                      />
-                    );
-                  })()}
-                </div>
-              </section>
-
-              {/* Insights Section */}
-              <section className="bg-white border border-gray-200 rounded-lg p-6">
-                <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                  AI-Powered Financial Insights
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-                  <div className="text-center p-4 bg-blue-50 rounded-lg">
-                    <div className="text-2xl font-bold text-blue-600 mb-1">
-                      {isAnimating ? animatedData.length : (llmAnalysis?.insights.totalPredictedTransactions || fullData.length || graphData.length)}
-                    </div>
-                    <div className="text-sm text-blue-800">
-                      {isAnimating ? 'Processed Transactions' : 'Predicted Transactions'}
-                    </div>
-                  </div>
-                  <div className="text-center p-4 bg-green-50 rounded-lg">
-                    <div className="text-2xl font-bold text-green-600 mb-1">
-                      {llmAnalysis?.insights.recurringTransactionCount || 0}
-                    </div>
-                    <div className="text-sm text-green-800">Recurring Transactions</div>
-                  </div>
-                  <div className="text-center p-4 bg-orange-50 rounded-lg">
-                    <div className="text-2xl font-bold text-orange-600 mb-1">
-                      ${Math.abs(llmAnalysis?.insights.averageTransactionAmount || 0).toLocaleString()}
-                    </div>
-                    <div className="text-sm text-orange-800">Avg Transaction Amount</div>
-                  </div>
-                  <div className="text-center p-4 bg-purple-50 rounded-lg">
-                    <div className="text-2xl font-bold text-purple-600 mb-1">
-                      {llmAnalysis?.summary.confidenceScore ? Math.round(llmAnalysis.summary.confidenceScore * 100) : 0}%
-                    </div>
-                    <div className="text-sm text-purple-800">Confidence Score</div>
-                  </div>
+                </section>
                 </div>
 
-                {llmAnalysis && (
-                  <div className="space-y-6">
-                    {/* Transaction Patterns */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      {/* Recurring Transactions */}
-                      <div>
-                        <h3 className="font-semibold text-gray-800 mb-3">Recurring Transactions</h3>
-                        <div className="space-y-2 max-h-48 overflow-y-auto">
-                          {llmAnalysis.patterns.recurringTransactions.map((transaction, index) => (
-                            <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                              <div>
-                                <div className="font-medium text-sm">{transaction.description}</div>
-                                <div className="text-xs text-gray-600">{transaction.frequency} • {transaction.category}</div>
-                              </div>
-                              <div className="text-right">
-                                <div className="font-medium text-sm">${Math.abs(transaction.averageAmount).toLocaleString()}</div>
-                                <div className="text-xs text-gray-600">{Math.round(transaction.confidence * 100)}% confidence</div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Significant Transactions */}
-                      <div>
-                        <h3 className="font-semibold text-gray-800 mb-3">Large Transaction Patterns</h3>
-                        <div className="space-y-2 max-h-48 overflow-y-auto">
-                          {llmAnalysis.patterns.significantTransactions.map((transaction, index) => (
-                            <div key={index} className="flex justify-between items-center p-2 bg-orange-50 rounded">
-                              <div>
-                                <div className="font-medium text-sm">{transaction.description}</div>
-                                <div className="text-xs text-gray-600">{transaction.frequency} • {transaction.category}</div>
-                              </div>
-                              <div className="text-right">
-                                <div className="font-medium text-sm">${Math.abs(transaction.averageAmount).toLocaleString()}</div>
-                                <div className="text-xs text-gray-600">Next: {new Date(transaction.predictedNext).toLocaleDateString()}</div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Categories and Insights */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      {/* Spending Categories */}
-                      <div>
-                        <h3 className="font-semibold text-gray-800 mb-3">Primary Spending Categories</h3>
-                        <div className="flex flex-wrap gap-2">
-                          {llmAnalysis.insights.primarySpendingCategories.map((category, index) => (
-                            <span
-                              key={index}
-                              className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full"
-                            >
-                              {category}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Seasonal Patterns */}
-                      <div>
-                        <h3 className="font-semibold text-gray-800 mb-3">Seasonal Patterns</h3>
-                        <div className="space-y-2">
-                          {llmAnalysis.patterns.seasonalPatterns.map((pattern, index) => (
-                            <div key={index} className="flex justify-between items-center p-2 bg-yellow-50 rounded">
-                              <div>
-                                <div className="font-medium text-sm capitalize">{pattern.season}</div>
-                                <div className="text-xs text-gray-600">{pattern.reason}</div>
-                              </div>
-                              <div className="text-right">
-                                <div className="font-medium text-sm">{pattern.category}</div>
-                                <div className="text-xs text-yellow-700">+${pattern.averageIncrease}</div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Risk Factors and Recommendations */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      {/* Risk Factors */}
-                      <div>
-                        <h3 className="font-semibold text-gray-800 mb-3">Risk Factors</h3>
-                        <ul className="space-y-1">
-                          {llmAnalysis.insights.riskFactors.map((risk, index) => (
-                            <li key={index} className="text-sm text-red-600 flex items-center">
-                              <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                              </svg>
-                              {risk}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      {/* Recommendations */}
-                      <div>
-                        <h3 className="font-semibold text-gray-800 mb-3">AI Recommendations</h3>
-                        <ul className="space-y-2">
-                          {llmAnalysis.insights.recommendations.map((recommendation, index) => (
-                            <li key={index} className="text-sm text-green-700 flex items-start">
-                              <svg className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                              </svg>
-                              {recommendation}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </section>
-
-              {/* Data Summary */}
-              <section className="bg-white border border-gray-200 rounded-lg p-6">
-                <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                  Connected Data Summary
-                </h2>
-                <div className="space-y-3">
-                  {uploadedFiles.transactions && (
-                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center">
-                        <svg className="w-5 h-5 text-green-500 mr-3" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              {/* Right Sidebar */}
+              {isSidebarVisible && (
+                <div className="w-80">
+                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                  {/* Tab Navigation */}
+                  <div className="flex border-b border-gray-200">
+                    <button
+                      onClick={() => setActiveTab('adjustments')}
+                      className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                        activeTab === 'adjustments'
+                          ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-500'
+                          : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-center space-x-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
+                        <span>Adjustments</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('rewards')}
+                      className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                        activeTab === 'rewards'
+                          ? 'bg-green-50 text-green-700 border-b-2 border-green-500'
+                          : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-center space-x-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                        </svg>
+                        <span>Rewards</span>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Tab Content */}
+                  <div className="p-6 max-h-96 overflow-y-auto">
+                    {activeTab === 'adjustments' && detectedAdjustments && hasAnyAdjustments(detectedAdjustments) && (
+                      <div className="space-y-6">
                         <div>
-                          <div className="font-medium text-gray-900">Transaction Data</div>
-                          <div className="text-sm text-gray-600">{uploadedFiles.transactions.name}</div>
+                          <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                            Detected Simulation Adjustments
+                          </h3>
+                          <p className="text-sm text-gray-600 mb-4">
+                            Based on your transaction history, we&apos;ve detected the following factors affecting your spending simulation.
+                          </p>
+                        </div>
+
+                        {/* Life Events */}
+                        {Object.entries(detectedAdjustments.lifeEvents || {}).filter(([, active]) => active).length > 0 && (
+                          <div className="space-y-3">
+                            <h4 className="font-medium text-gray-800 flex items-center text-sm">
+                              <svg className="w-4 h-4 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              Life Events
+                            </h4>
+                            <div className="space-y-2">
+                              {Object.entries(detectedAdjustments.lifeEvents || {})
+                                .filter(([, active]) => active)
+                                .map(([key]) => {
+                                  const info = getAdjustmentDisplayInfo('lifeEvents', key);
+                                  const isToggled = toggledAdjustments.has(key);
+                                  return (
+                                    <div 
+                                      key={key} 
+                                      className={`flex items-start space-x-2 p-2 rounded-lg border cursor-pointer transition-all duration-200 ${
+                                        isToggled 
+                                          ? 'bg-blue-100 border-blue-300 shadow-sm' 
+                                          : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+                                      }`}
+                                      onMouseEnter={() => setHighlightedAdjustment(key)}
+                                      onMouseLeave={() => setHighlightedAdjustment(null)}
+                                      onClick={() => handleAdjustmentToggle(key)}
+                                    >
+                                      <span className="text-sm">{info.icon}</span>
+                                      <div className="flex-1 min-w-0">
+                                        <div className={`font-medium text-xs ${isToggled ? 'text-blue-900' : 'text-blue-800'}`}>
+                                          {info.label}
+                                        </div>
+                                        <div className={`text-xs ${isToggled ? 'text-blue-700' : 'text-blue-600'}`}>
+                                          {info.description}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Behavioral Changes */}
+                        {Object.entries(detectedAdjustments.behavioralChanges || {}).filter(([, active]) => active).length > 0 && (
+                          <div className="space-y-3">
+                            <h4 className="font-medium text-gray-800 flex items-center text-sm">
+                              <svg className="w-4 h-4 mr-2 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                              </svg>
+                              Behavioral Changes
+                            </h4>
+                            <div className="space-y-2">
+                              {Object.entries(detectedAdjustments.behavioralChanges || {})
+                                .filter(([, active]) => active)
+                                .map(([key]) => {
+                                  const info = getAdjustmentDisplayInfo('behavioralChanges', key);
+                                  const isToggled = toggledAdjustments.has(key);
+                                  return (
+                                    <div 
+                                      key={key} 
+                                      className={`flex items-start space-x-2 p-2 rounded-lg border cursor-pointer transition-all duration-200 ${
+                                        isToggled 
+                                          ? 'bg-orange-100 border-orange-300 shadow-sm' 
+                                          : 'bg-orange-50 border-orange-200 hover:bg-orange-100'
+                                      }`}
+                                      onMouseEnter={() => setHighlightedAdjustment(key)}
+                                      onMouseLeave={() => setHighlightedAdjustment(null)}
+                                      onClick={() => handleAdjustmentToggle(key)}
+                                    >
+                                      <span className="text-sm">{info.icon}</span>
+                                      <div className="flex-1 min-w-0">
+                                        <div className={`font-medium text-xs ${isToggled ? 'text-orange-900' : 'text-orange-800'}`}>
+                                          {info.label}
+                                        </div>
+                                        <div className={`text-xs ${isToggled ? 'text-orange-700' : 'text-orange-600'}`}>
+                                          {info.description}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* External Factors */}
+                        {Object.entries(detectedAdjustments.externalFactors || {}).filter(([, active]) => active).length > 0 && (
+                          <div className="space-y-3">
+                            <h4 className="font-medium text-gray-800 flex items-center text-sm">
+                              <svg className="w-4 h-4 mr-2 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              External Factors
+                            </h4>
+                            <div className="space-y-2">
+                              {Object.entries(detectedAdjustments.externalFactors || {})
+                                .filter(([, active]) => active)
+                                .map(([key]) => {
+                                  const info = getAdjustmentDisplayInfo('externalFactors', key);
+                                  const isToggled = toggledAdjustments.has(key);
+                                  return (
+                                    <div 
+                                      key={key} 
+                                      className={`flex items-start space-x-2 p-2 rounded-lg border cursor-pointer transition-all duration-200 ${
+                                        isToggled 
+                                          ? 'bg-purple-100 border-purple-300 shadow-sm' 
+                                          : 'bg-purple-50 border-purple-200 hover:bg-purple-100'
+                                      }`}
+                                      onMouseEnter={() => setHighlightedAdjustment(key)}
+                                      onMouseLeave={() => setHighlightedAdjustment(null)}
+                                      onClick={() => handleAdjustmentToggle(key)}
+                                    >
+                                      <span className="text-sm">{info.icon}</span>
+                                      <div className="flex-1 min-w-0">
+                                        <div className={`font-medium text-xs ${isToggled ? 'text-purple-900' : 'text-purple-800'}`}>
+                                          {info.label}
+                                        </div>
+                                        <div className={`text-xs ${isToggled ? 'text-purple-700' : 'text-purple-600'}`}>
+                                          {info.description}
+                                        </div>
                         </div>
                       </div>
-                      <div className="text-sm text-gray-500">
-                        {(uploadedFiles.transactions.size / 1024).toFixed(1)} KB
+                                  );
+                                })}
                       </div>
                     </div>
                   )}
-                  {uploadedFiles.debt && (
-                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center">
-                        <svg className="w-5 h-5 text-green-500 mr-3" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+
+                        {/* No adjustments message */}
+                        {!hasAnyAdjustments(detectedAdjustments) && (
+                          <div className="text-center py-4">
+                            <div className="text-gray-400 mb-2">
+                              <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
+                            </div>
+                            <p className="text-sm text-gray-600">
+                              No specific adjustments detected. Using standard spending patterns.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {activeTab === 'rewards' && optimizationSummary && (
+                      <div className="space-y-6">
                         <div>
-                          <div className="font-medium text-gray-900">Credit & Debt Data</div>
-                          <div className="text-sm text-gray-600">{uploadedFiles.debt.name}</div>
+                          <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                            Credit Card Reward Optimization
+                          </h3>
+                          <p className="text-sm text-gray-600 mb-4">
+                            Analysis of your credit card usage and potential reward optimization opportunities.
+                          </p>
                         </div>
+                        
+                        <div className="grid grid-cols-2 gap-3">
+                          {/* Total Points Earned */}
+                          <div className="bg-blue-50 rounded-lg p-3">
+                            <div className="text-lg font-bold text-blue-600">
+                              {optimizationSummary.totalActualPoints?.toLocaleString() || '0'}
+                            </div>
+                            <div className="text-xs text-blue-800 font-medium">Points Earned</div>
+                            <div className="text-xs text-blue-600">Current cards</div>
+                          </div>
+
+                          {/* Potential Points */}
+                          <div className="bg-green-50 rounded-lg p-3">
+                            <div className="text-lg font-bold text-green-600">
+                              {optimizationSummary.totalOptimalPoints?.toLocaleString() || '0'}
+                            </div>
+                            <div className="text-xs text-green-800 font-medium">Potential Points</div>
+                            <div className="text-xs text-green-600">Optimal cards</div>
+                          </div>
+
+                          {/* Points Lost */}
+                          <div className="bg-orange-50 rounded-lg p-3">
+                            <div className="text-lg font-bold text-orange-600">
+                              {optimizationSummary.pointsLost?.toLocaleString() || '0'}
+                            </div>
+                            <div className="text-xs text-orange-800 font-medium">Points Lost</div>
+                            <div className="text-xs text-orange-600">Missed opportunities</div>
+                          </div>
+
+                          {/* Optimization Rate */}
+                          <div className="bg-purple-50 rounded-lg p-3">
+                            <div className="text-lg font-bold text-purple-600">
+                              {optimizationSummary.optimizationRate?.toFixed(1) || '0'}%
+                            </div>
+                            <div className="text-xs text-purple-800 font-medium">Efficiency</div>
+                            <div className="text-xs text-purple-600">Current rate</div>
+                          </div>
+                        </div>
+
+                        {/* Non-optimal transactions indicator */}
+                        {optimizationSummary.nonOptimalTransactions > 0 && (
+                          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                            <div className="flex items-start space-x-2">
+                              <div className="text-yellow-600 text-sm">⚠️</div>
+                              <div className="flex-1">
+                                <div className="font-medium text-yellow-800 text-sm">
+                                  {optimizationSummary.nonOptimalTransactions} of {optimizationSummary.totalTransactions} transactions used non-optimal cards
+                                </div>
+                                <div className="text-xs text-yellow-700 mt-1">
+                                  Enable &quot;Rewards&quot; view in the graph to see optimization opportunities.
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="text-sm text-gray-500">
-                        {(uploadedFiles.debt.size / 1024).toFixed(1)} KB
+                    )}
+
+                    {/* Empty states */}
+                    {activeTab === 'adjustments' && (!detectedAdjustments || !hasAnyAdjustments(detectedAdjustments)) && (
+                      <div className="text-center py-8">
+                        <div className="text-gray-400 mb-3">
+                          <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <h4 className="font-medium text-gray-800 mb-1">No Adjustments Detected</h4>
+                        <p className="text-sm text-gray-600">
+                          Using standard spending patterns with inflation and seasonal adjustments.
+                        </p>
                       </div>
+                    )}
+
+                    {activeTab === 'rewards' && !optimizationSummary && (
+                      <div className="text-center py-8">
+                        <div className="text-gray-400 mb-3">
+                          <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                          </svg>
+                        </div>
+                        <h4 className="font-medium text-gray-800 mb-1">No Reward Data</h4>
+                        <p className="text-sm text-gray-600">
+                          Upload transaction data with credit card information to see reward optimization.
+                        </p>
                     </div>
                   )}
+                  </div>
                 </div>
-              </section>
-            </>
+                </div>
+              )}
+            </div>
           ) : (
             /* Welcome Section */
             <section className="text-center py-12">
@@ -1469,19 +1334,19 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                   <div className="p-6 border border-gray-200 rounded-lg">
-                    <div className="text-blue-600 mb-3">
-                      <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="text-center">
+                      <svg className="w-8 h-8 mx-auto text-blue-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                     </div>
-                    <h3 className="font-semibold text-gray-900 mb-2">Transaction Data</h3>
+                    <h3 className="font-semibold text-gray-900 mb-2">Transaction History</h3>
                     <p className="text-sm text-gray-600">
-                      Bank statements, credit card transactions, and spending history to analyze your patterns.
+                      Bank statements, credit card transactions, and spending records to analyze your patterns.
                     </p>
                   </div>
                   <div className="p-6 border border-gray-200 rounded-lg">
-                    <div className="text-red-600 mb-3">
-                      <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="text-center">
+                      <svg className="w-8 h-8 mx-auto text-blue-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                       </svg>
                     </div>
