@@ -40,11 +40,11 @@ export async function POST(request: NextRequest) {
         const totalDuration = Date.now() - startTime;
         console.log('🎉 [API] Testing mode completed successfully in', totalDuration, 'ms');
         
-        // For testing mode, use default adjustments
+        // For testing mode, use minimal adjustments (only if detected)
         const testingAdjustments = {
           lifeEvents: {},
-          behavioralChanges: {},
-          externalFactors: { inflation: true, seasonalAdjustments: true }
+          behavioralChanges: { dietaryShift: true }, // Example: show dietary shift in test mode
+          externalFactors: {}
         };
         
         // Add detected adjustments to the response
@@ -117,14 +117,14 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: "system",
-          content: "You are a financial analyst AI that analyzes spending patterns and creates realistic spending projections. You must respond with valid JSON only, no additional text."
+          content: "You are a financial analyst AI that analyzes spending patterns and creates realistic spending projections. CRITICAL: When asked to generate 150-200 transactions, you MUST generate the COMPLETE list of 150-200 transactions, NOT just 20-30 samples. You must respond with valid JSON only, no additional text."
         },
         {
           role: "user",
           content: prompt
         }
       ],
-      max_completion_tokens: 10000,
+      max_completion_tokens: 16384,
     });
 
     const apiCallDuration = Date.now() - apiCallStart;
@@ -168,16 +168,23 @@ export async function POST(request: NextRequest) {
 
     console.log('📄 [API] Raw OpenAI response preview (first 500 chars):', 
       analysisResult.substring(0, 500) + '...');
+    console.log('📄 [API] Raw OpenAI response preview (last 500 chars):', 
+      '...' + analysisResult.substring(analysisResult.length - 500));
 
     // Parse the JSON response
     console.log('🔄 [API] Parsing JSON response...');
     let analysis;
     try {
       // Clean the response to remove any comments or invalid JSON
-      let cleanedResponse = analysisResult;
+      let cleanedResponse = analysisResult.trim();
+      
+      // Remove markdown code blocks if present
+      cleanedResponse = cleanedResponse.replace(/```json\s*/g, '');
+      cleanedResponse = cleanedResponse.replace(/```\s*/g, '');
       
       // Remove JavaScript-style comments
       cleanedResponse = cleanedResponse.replace(/\/\/.*$/gm, '');
+      cleanedResponse = cleanedResponse.replace(/\/\*[\s\S]*?\*\//g, '');
       
       // Remove any trailing commas before closing brackets/braces
       cleanedResponse = cleanedResponse.replace(/,(\s*[}\]])/g, '$1');
@@ -188,7 +195,18 @@ export async function POST(request: NextRequest) {
         cleanedResponse = jsonMatch[0];
       }
       
+      // Additional cleaning for common LLM response issues
+      cleanedResponse = cleanedResponse.replace(/^[^{]*/, ''); // Remove text before first {
+      if (!cleanedResponse.endsWith('}')) {
+        const lastBraceIndex = cleanedResponse.lastIndexOf('}');
+        if (lastBraceIndex !== -1) {
+          cleanedResponse = cleanedResponse.substring(0, lastBraceIndex + 1);
+        }
+      }
+      
       console.log('🧹 [API] Cleaned response length:', cleanedResponse.length);
+      console.log('🧹 [API] Cleaned response starts with:', cleanedResponse.substring(0, 50));
+      console.log('🧹 [API] Cleaned response ends with:', cleanedResponse.substring(cleanedResponse.length - 50));
       
       analysis = JSON.parse(cleanedResponse);
       console.log('✅ [API] JSON parsing successful');
@@ -198,8 +216,25 @@ export async function POST(request: NextRequest) {
         significantTransactionsCount: analysis.patterns?.significantTransactions?.length || 0,
         seasonalPatternsCount: analysis.patterns?.seasonalPatterns?.length || 0,
         recommendationsCount: analysis.insights?.recommendations?.length || 0,
-        totalPredictedTransactions: analysis.insights?.totalPredictedTransactions || 0
+        totalPredictedTransactions: analysis.insights?.totalPredictedTransactions || 0,
+        topLevelKeys: Object.keys(analysis)
       });
+      
+      // Debug the structure of simulated transactions
+      if (analysis.simulatedTransactions && analysis.simulatedTransactions.length > 0) {
+        console.log('🔍 [API] First transaction structure:', JSON.stringify(analysis.simulatedTransactions[0], null, 2));
+        console.log('🔍 [API] Transaction validation:', {
+          hasDate: !!analysis.simulatedTransactions[0].date,
+          hasDescription: !!analysis.simulatedTransactions[0].description,
+          hasAmount: !!analysis.simulatedTransactions[0].amount,
+          dateValue: analysis.simulatedTransactions[0].date,
+          amountValue: analysis.simulatedTransactions[0].amount
+        });
+      } else {
+        console.log('⚠️ [API] No simulatedTransactions found in parsed response');
+        console.log('🔍 [API] Full analysis object keys:', Object.keys(analysis));
+        console.log('🔍 [API] Analysis object preview:', JSON.stringify(analysis, null, 2).substring(0, 1000) + '...');
+      }
 
       // Log first few simulated transactions for debugging
       if (analysis.simulatedTransactions && analysis.simulatedTransactions.length > 0) {
@@ -232,10 +267,31 @@ export async function POST(request: NextRequest) {
     console.log('🎉 [API] Analysis completed successfully in', totalDuration, 'ms');
 
     // Check if we have enough transactions, if not, generate fallback data
-    if (!analysis.simulatedTransactions || analysis.simulatedTransactions.length < 50) {
-      console.log('⚠️ [API] Insufficient transactions generated, creating fallback data');
+    const transactionCount = analysis.simulatedTransactions?.length || 0;
+    const hasValidTransactions = analysis.simulatedTransactions && 
+      Array.isArray(analysis.simulatedTransactions) && 
+      transactionCount > 0;
+    
+    console.log('🔍 [API] Transaction validation check:', {
+      hasSimulatedTransactions: !!analysis.simulatedTransactions,
+      isArray: Array.isArray(analysis.simulatedTransactions),
+      transactionCount: transactionCount,
+      hasValidTransactions: hasValidTransactions,
+      threshold: 100
+    });
+    
+    if (!hasValidTransactions || transactionCount < 100) {
+      console.log(`⚠️ [API] Insufficient transactions generated (${transactionCount}/100 minimum), creating fallback data`);
+      console.log('🔍 [API] Fallback reason:', {
+        noTransactions: !analysis.simulatedTransactions,
+        notArray: !Array.isArray(analysis.simulatedTransactions),
+        tooFew: transactionCount < 100,
+        actualCount: transactionCount
+      });
       analysis.simulatedTransactions = generateFallbackTransactions(transactionData, debtData, detectedAdjustments);
       console.log(`📊 [API] Generated ${analysis.simulatedTransactions.length} fallback transactions`);
+    } else {
+      console.log(`✅ [API] Using LLM-generated transactions (${transactionCount} transactions)`);
     }
 
     // Export simulated transactions to CSV
@@ -301,7 +357,11 @@ interface SimulationAdjustments {
 }
 
 function createAnalysisPrompt(transactionData: TransactionDataInput[], debtData: DebtDataInput[], simulationAdjustments?: SimulationAdjustments): string {
-  let prompt = `You are an expert financial analyst with deep understanding of spending patterns and behavioral economics. Analyze the following financial data and simulate individual CREDIT CARD transactions for the next 12 months using in-context learning from the provided examples.
+  let prompt = `🚨 CRITICAL INSTRUCTION: YOU MUST GENERATE 150-200 INDIVIDUAL TRANSACTIONS 🚨
+
+You are an expert financial analyst with deep understanding of spending patterns and behavioral economics. Analyze the following financial data and simulate individual CREDIT CARD transactions for the next 12 months using in-context learning from the provided examples.
+
+⚠️ WARNING: DO NOT GENERATE ONLY 20-30 SAMPLE TRANSACTIONS. YOU MUST PROVIDE THE COMPLETE LIST OF 150-200 TRANSACTIONS.
 
 IMPORTANT: Generate ONLY credit card transactions. Do not include:
 - Salary deposits or income
@@ -348,11 +408,15 @@ CRITICAL: Return ONLY valid JSON. Do not include:
 - Explanatory text before or after JSON
 - Trailing commas
 - Any text outside the JSON object
+- Markdown code blocks or formatting
+
+IMPORTANT: Your response must start with { and end with } - nothing else.
 
 Return your response as valid JSON with this exact structure:
 
 {
   "simulatedTransactions": [
+    // MUST CONTAIN 150-200 TRANSACTIONS - DO NOT TRUNCATE THIS ARRAY
     {
       "date": "2024-07-05",
       "description": "Grocery Store",
@@ -681,13 +745,36 @@ Based on this data and the above adjustments, simulate individual transactions f
    - Medium confidence (0.7-0.9): Regular but variable (groceries, gas, dining)
    - Low confidence (0.5-0.7): Irregular purchases, entertainment, statistically significant outlier transactions
 
-CRITICAL REQUIREMENTS:
-1. Generate EXACTLY 150-200 individual transactions covering the full 12-month period
-2. Each month must have 12-17 transactions
-3. Do NOT include comments like "// ... continue for 12 months"
-4. Return ONLY valid JSON - no explanatory text
-5. Ensure all JSON arrays are properly closed with commas between elements
-6. Focus on creating a realistic spending simulation that mirrors the user's historical patterns
+🚨 CRITICAL REQUIREMENTS - MUST FOLLOW EXACTLY 🚨
+
+YOU MUST GENERATE EXACTLY 150-200 INDIVIDUAL TRANSACTIONS. NOT 20, NOT 50, BUT 150-200 TRANSACTIONS.
+
+TRANSACTION COUNT BREAKDOWN BY MONTH:
+- January 2024: 12-17 transactions
+- February 2024: 12-17 transactions  
+- March 2024: 12-17 transactions
+- April 2024: 12-17 transactions
+- May 2024: 12-17 transactions
+- June 2024: 12-17 transactions
+- July 2024: 12-17 transactions
+- August 2024: 12-17 transactions
+- September 2024: 12-17 transactions
+- October 2024: 12-17 transactions
+- November 2024: 12-17 transactions
+- December 2024: 12-17 transactions
+
+TOTAL: 144-204 transactions (TARGET: 175 transactions)
+
+MANDATORY RULES:
+1. Do NOT generate only 20-30 sample transactions
+2. Do NOT use comments like "// ... continue for 12 months"
+3. Do NOT truncate or abbreviate the transaction list
+4. GENERATE THE COMPLETE LIST OF 150-200 TRANSACTIONS
+5. Each month needs 12-17 actual transaction entries
+6. Return ONLY valid JSON - no explanatory text
+7. The simulatedTransactions array must contain 150-200 objects
+
+FAILURE TO GENERATE 150-200 TRANSACTIONS WILL RESULT IN SYSTEM FAILURE.
 
 The response must be valid JSON that can be parsed by JSON.parse().`;
 
@@ -1098,9 +1185,8 @@ function detectSimulationAdjustments(transactionData: TransactionDataInput[], _d
   };
 
   if (!transactionData || transactionData.length === 0) {
-    // Default adjustments for test mode
-    detectedAdjustments.externalFactors.inflation = true;
-    detectedAdjustments.externalFactors.seasonalAdjustments = true;
+    // For test mode, only add adjustments if there's a reason to
+    console.log('🧪 [Detection] Test mode - no transaction data to analyze');
     return detectedAdjustments;
   }
 
@@ -1310,10 +1396,46 @@ function detectSimulationAdjustments(transactionData: TransactionDataInput[], _d
     console.log('🚗 [Detection] Transportation change detected based on transport expenses');
   }
 
-  // Detect External Factors (always apply these as they're universal)
-  detectedAdjustments.externalFactors.inflation = true;
-  detectedAdjustments.externalFactors.seasonalAdjustments = true;
-  console.log('📈 [Detection] Applied universal external factors: inflation, seasonal adjustments');
+  // Detect External Factors (only if there's evidence in the data)
+  // Check for inflation indicators (gradual price increases over time)
+  const hasInflationIndicators = timeWindows.some(trend => 
+    (trend.category.includes('grocery') || trend.category.includes('gas') || trend.category.includes('utilities')) &&
+    trend.changePercent > 10 // Significant increase suggesting inflation
+  );
+  
+  if (hasInflationIndicators) {
+    detectedAdjustments.externalFactors.inflation = true;
+    console.log('💹 [Detection] Inflation detected based on price increases in essential categories');
+  }
+  
+  // Check for seasonal patterns (significant spending variations by time period)
+  const hasSeasonalPatterns = amounts.length > 50 && // Need sufficient data
+    sortedTransactions.length > 90; // At least 3 months of data
+  
+  if (hasSeasonalPatterns) {
+    // Simple seasonal detection: check if there are significant spending variations
+    const monthlySpending: Record<string, number[]> = {};
+    sortedTransactions.forEach(t => {
+      const date = new Date(t.transaction_date || '');
+      const month = date.getMonth();
+      if (!monthlySpending[month]) monthlySpending[month] = [];
+      monthlySpending[month].push(Math.abs(t.amount || 0));
+    });
+    
+    const monthlyAverages = Object.values(monthlySpending)
+      .filter(amounts => amounts.length > 0)
+      .map(amounts => amounts.reduce((sum, amt) => sum + amt, 0) / amounts.length);
+    
+    if (monthlyAverages.length >= 3) {
+      const avgSpending = monthlyAverages.reduce((sum, avg) => sum + avg, 0) / monthlyAverages.length;
+      const hasVariation = monthlyAverages.some(avg => Math.abs(avg - avgSpending) / avgSpending > 0.3); // 30% variation
+      
+      if (hasVariation) {
+        detectedAdjustments.externalFactors.seasonalAdjustments = true;
+        console.log('🌟 [Detection] Seasonal patterns detected based on monthly spending variations');
+      }
+    }
+  }
 
   // Track subscription transactions for social trends
   const subscriptionKeywords = ['subscription', 'netflix', 'spotify', 'amazon prime', 'disney+', 'hulu'];

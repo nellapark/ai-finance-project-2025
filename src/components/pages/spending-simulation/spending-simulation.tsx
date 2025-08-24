@@ -370,6 +370,14 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
     return null;
   };
 
+  const hasAnyAdjustments = (adjustments: DetectedAdjustments): boolean => {
+    const hasLifeEvents = Object.values(adjustments.lifeEvents || {}).some(active => active);
+    const hasBehavioralChanges = Object.values(adjustments.behavioralChanges || {}).some(active => active);
+    const hasExternalFactors = Object.values(adjustments.externalFactors || {}).some(active => active);
+    
+    return hasLifeEvents || hasBehavioralChanges || hasExternalFactors;
+  };
+
   const handleTestingMode = async () => {
     setHasConnectedData(true);
     setIsAnalyzing(true);
@@ -784,7 +792,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
           ) : hasConnectedData ? (
             <>
               {/* Detected Adjustments Section */}
-              {detectedAdjustments && (
+              {detectedAdjustments && hasAnyAdjustments(detectedAdjustments) && (
                 <section className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
                   <h2 className="text-xl font-semibold text-gray-800 mb-4">
                     Detected Simulation Adjustments
