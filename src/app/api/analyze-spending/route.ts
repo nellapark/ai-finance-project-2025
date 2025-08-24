@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   console.log('🚀 [API] Starting spending analysis request');
   
   try {
-    const { transactionData, debtData, isTesting = false } = await request.json();
+    const { transactionData, debtData, isTesting = false, simulationAdjustments } = await request.json();
     
     console.log('📊 [API] Received data:', {
       transactionCount: transactionData?.length || 0,
@@ -40,7 +40,20 @@ export async function POST(request: NextRequest) {
         const totalDuration = Date.now() - startTime;
         console.log('🎉 [API] Testing mode completed successfully in', totalDuration, 'ms');
         
-        return NextResponse.json(analysis);
+        // For testing mode, use default adjustments
+        const testingAdjustments = {
+          lifeEvents: {},
+          behavioralChanges: {},
+          externalFactors: { inflation: true, seasonalAdjustments: true }
+        };
+        
+        // Add detected adjustments to the response
+        const responseWithAdjustments = {
+          ...analysis,
+          detectedAdjustments: testingAdjustments
+        };
+
+        return NextResponse.json(responseWithAdjustments);
       } catch (testingError) {
         console.error('❌ [API] Testing mode failed:', testingError);
         console.log('🔄 [API] Falling back to generating new transactions');
@@ -67,9 +80,16 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Detect which adjustments should be applied based on data analysis
+    console.log('🔍 [API] Detecting simulation adjustments from transaction data...');
+    const detectedAdjustments = detectSimulationAdjustments(transactionData, debtData);
+    
+    // Use detected adjustments instead of user-provided ones for more accurate simulation
+    const adjustmentsToUse = detectedAdjustments;
+
     // Prepare data summary for the LLM
     console.log('📝 [API] Creating analysis prompt...');
-    const prompt = createAnalysisPrompt(transactionData, debtData);
+    const prompt = createAnalysisPrompt(transactionData, debtData, adjustmentsToUse);
     
     console.log('📏 [API] Prompt length:', prompt.length, 'characters');
     console.log('🔍 [API] Prompt preview (first 500 chars):', prompt.substring(0, 500) + '...');
@@ -195,7 +215,13 @@ export async function POST(request: NextRequest) {
       console.error('❌ [API] Failed to export transactions to CSV:', exportError);
     }
 
-    return NextResponse.json(analysis);
+    // Add detected adjustments to the response
+    const responseWithAdjustments = {
+      ...analysis,
+      detectedAdjustments: detectedAdjustments
+    };
+
+    return NextResponse.json(responseWithAdjustments);
   } catch (error) {
     const totalDuration = Date.now() - startTime;
     console.error('💥 [API] Error analyzing spending after', totalDuration, 'ms:', {
@@ -237,7 +263,13 @@ interface DebtDataInput {
   account_status?: string;
 }
 
-function createAnalysisPrompt(transactionData: TransactionDataInput[], debtData: DebtDataInput[]): string {
+interface SimulationAdjustments {
+  lifeEvents?: Record<string, boolean>;
+  behavioralChanges?: Record<string, boolean>;
+  externalFactors?: Record<string, boolean>;
+}
+
+function createAnalysisPrompt(transactionData: TransactionDataInput[], debtData: DebtDataInput[], simulationAdjustments?: SimulationAdjustments): string {
   let prompt = `Analyze the following financial data and simulate individual CREDIT CARD transactions for the next 12 months. 
 
 IMPORTANT: Generate ONLY credit card transactions. Do not include:
@@ -426,7 +458,97 @@ Return your response as valid JSON with this exact structure:
     });
   }
 
-  prompt += `\nBased on this data, simulate individual transactions for the next 12 months by:
+  // Add simulation adjustments if provided
+  if (simulationAdjustments) {
+    prompt += `\nSIMULATION ADJUSTMENTS:\n`;
+    prompt += `Apply the following adjustments to the spending simulation:\n\n`;
+    
+    // Life Events
+    const activeLifeEvents = Object.entries(simulationAdjustments.lifeEvents || {})
+      .filter(([_, active]) => active)
+      .map(([event, _]) => event);
+    
+    if (activeLifeEvents.length > 0) {
+      prompt += `LIFE EVENTS (adjust spending patterns accordingly):\n`;
+      activeLifeEvents.forEach(event => {
+        switch(event) {
+          case 'recentMove':
+            prompt += `- Recent Move: Add furniture purchases ($2000-5000), moving costs ($500-1500), home setup expenses\n`;
+            break;
+          case 'newMarriage':
+            prompt += `- New Marriage: Include wedding expenses ($5000-15000), ring purchases ($1000-5000), honeymoon costs\n`;
+            break;
+          case 'newBaby':
+            prompt += `- New Baby: Add healthcare costs (+$200/month), childcare expenses ($800-2000/month), baby supplies\n`;
+            break;
+          case 'jobChange':
+            prompt += `- Job Change: Adjust commuting costs, possible relocation expenses, income level changes\n`;
+            break;
+          case 'graduation':
+            prompt += `- Graduation: Eliminate tuition payments, increase discretionary spending, add professional wardrobe costs\n`;
+            break;
+        }
+      });
+      prompt += `\n`;
+    }
+    
+    // Behavioral Changes
+    const activeBehavioralChanges = Object.entries(simulationAdjustments.behavioralChanges || {})
+      .filter(([_, active]) => active)
+      .map(([change, _]) => change);
+    
+    if (activeBehavioralChanges.length > 0) {
+      prompt += `BEHAVIORAL CHANGES (modify spending patterns):\n`;
+      activeBehavioralChanges.forEach(change => {
+        switch(change) {
+          case 'dietaryShift':
+            prompt += `- Dietary Shift: Reduce restaurant spending by 40%, increase grocery spending by 25%\n`;
+            break;
+          case 'fitnessChange':
+            prompt += `- Fitness Change: Add gym membership ($50-100/month), fitness equipment, health supplements\n`;
+            break;
+          case 'transportationChange':
+            prompt += `- Transportation Change: Adjust between car payments/gas vs public transit vs rideshare costs\n`;
+            break;
+          case 'entertainmentShift':
+            prompt += `- Entertainment Shift: Reduce going-out expenses by 50%, increase streaming subscriptions\n`;
+            break;
+        }
+      });
+      prompt += `\n`;
+    }
+    
+    // External Factors
+    const activeExternalFactors = Object.entries(simulationAdjustments.externalFactors || {})
+      .filter(([_, active]) => active)
+      .map(([factor, _]) => factor);
+    
+    if (activeExternalFactors.length > 0) {
+      prompt += `EXTERNAL FACTORS (apply economic adjustments):\n`;
+      activeExternalFactors.forEach(factor => {
+        switch(factor) {
+          case 'inflation':
+            prompt += `- Inflation: Increase grocery costs by 6%, utilities by 4%, general goods by 3%\n`;
+            break;
+          case 'interestRates':
+            prompt += `- Interest Rates: Adjust loan payments and credit card interest based on rate changes\n`;
+            break;
+          case 'seasonalAdjustments':
+            prompt += `- Seasonal Patterns: Higher utilities in summer/winter, holiday spending in December\n`;
+            break;
+          case 'socialTrends':
+            prompt += `- Social Trends: Add new subscription services, increase travel spending to pre-COVID levels\n`;
+            break;
+          case 'economicConditions':
+            prompt += `- Economic Conditions: Adjust discretionary spending based on economic outlook\n`;
+            break;
+        }
+      });
+      prompt += `\n`;
+    }
+  }
+
+  prompt += `\nBased on this data and the above adjustments, simulate individual transactions for the next 12 months by:
 
 1. IDENTIFYING PATTERNS FROM HISTORICAL DATA:
    - Find ALL recurring transactions (salary, rent, utilities, subscriptions, loan payments)
@@ -791,6 +913,240 @@ interface MockAnalysis {
     projectedNetChange: number;
     confidenceScore: number;
   };
+}
+
+interface TransactionMetadata {
+  adjustment: string;
+  category: string;
+  transactionIndices: number[];
+  label: string;
+  description: string;
+}
+
+function detectSimulationAdjustments(transactionData: TransactionDataInput[], _debtData: DebtDataInput[]): SimulationAdjustments & { transactionMetadata?: TransactionMetadata[] } {
+  const detectedAdjustments = {
+    lifeEvents: {} as Record<string, boolean>,
+    behavioralChanges: {} as Record<string, boolean>,
+    externalFactors: {} as Record<string, boolean>,
+    transactionMetadata: [] as TransactionMetadata[]
+  };
+
+  if (!transactionData || transactionData.length === 0) {
+    // Default adjustments for test mode
+    detectedAdjustments.externalFactors.inflation = true;
+    detectedAdjustments.externalFactors.seasonalAdjustments = true;
+    return detectedAdjustments;
+  }
+
+  // Analyze transaction patterns to detect adjustments
+  const amounts = transactionData.map(t => Math.abs(t.amount || 0));
+  const descriptions = transactionData.map(t => (t.description || '').toLowerCase());
+  const categories = transactionData.map(t => (t.category || '').toLowerCase());
+  const totalSpending = amounts.reduce((sum, amount) => sum + amount, 0);
+  const avgTransaction = totalSpending / amounts.length;
+
+  console.log('🔍 [Detection] Analyzing transaction patterns for adjustments...');
+  console.log('📊 [Detection] Transaction stats:', {
+    totalTransactions: transactionData.length,
+    totalSpending: totalSpending.toFixed(2),
+    avgTransaction: avgTransaction.toFixed(2)
+  });
+
+  // Detect Life Events and track triggering transactions
+  const furnitureKeywords = ['furniture', 'ikea', 'wayfair', 'home depot', 'lowes', 'moving', 'uhaul'];
+  const weddingKeywords = ['wedding', 'bridal', 'tuxedo', 'venue', 'catering', 'flowers', 'photographer'];
+  const babyKeywords = ['baby', 'pediatric', 'childcare', 'daycare', 'diaper', 'formula', 'stroller'];
+
+  // Track Recent Move transactions
+  const recentMoveTransactions: number[] = [];
+  transactionData.forEach((transaction, index) => {
+    const desc = (transaction.description || '').toLowerCase();
+    const amount = Math.abs(transaction.amount || 0);
+    if (furnitureKeywords.some(keyword => desc.includes(keyword)) || 
+        (amount > 1000 && furnitureKeywords.some(keyword => desc.includes(keyword)))) {
+      recentMoveTransactions.push(index);
+    }
+  });
+  
+  if (recentMoveTransactions.length > 0) {
+    detectedAdjustments.lifeEvents.recentMove = true;
+    detectedAdjustments.transactionMetadata.push({
+      adjustment: 'recentMove',
+      category: 'lifeEvents',
+      transactionIndices: recentMoveTransactions,
+      label: 'Recent Move',
+      description: 'Furniture purchases, moving costs, home setup expenses'
+    });
+    console.log('🏠 [Detection] Recent move detected based on furniture/moving expenses');
+  }
+
+  // Track Wedding transactions
+  const weddingTransactions: number[] = [];
+  transactionData.forEach((transaction, index) => {
+    const desc = (transaction.description || '').toLowerCase();
+    const amount = Math.abs(transaction.amount || 0);
+    if (weddingKeywords.some(keyword => desc.includes(keyword)) || 
+        (amount > 2000 && weddingKeywords.some(keyword => desc.includes(keyword)))) {
+      weddingTransactions.push(index);
+    }
+  });
+  
+  if (weddingTransactions.length > 0) {
+    detectedAdjustments.lifeEvents.newMarriage = true;
+    detectedAdjustments.transactionMetadata.push({
+      adjustment: 'newMarriage',
+      category: 'lifeEvents',
+      transactionIndices: weddingTransactions,
+      label: 'New Marriage',
+      description: 'Wedding expenses, ring purchases, honeymoon costs'
+    });
+    console.log('💒 [Detection] New marriage detected based on wedding-related expenses');
+  }
+
+  // Track Baby transactions
+  const babyTransactions: number[] = [];
+  transactionData.forEach((transaction, index) => {
+    const desc = (transaction.description || '').toLowerCase();
+    const cat = (transaction.category || '').toLowerCase();
+    if (babyKeywords.some(keyword => desc.includes(keyword)) || 
+        ['healthcare', 'medical', 'childcare'].includes(cat)) {
+      babyTransactions.push(index);
+    }
+  });
+  
+  if (babyTransactions.length > 0) {
+    detectedAdjustments.lifeEvents.newBaby = true;
+    detectedAdjustments.transactionMetadata.push({
+      adjustment: 'newBaby',
+      category: 'lifeEvents',
+      transactionIndices: babyTransactions,
+      label: 'New Baby',
+      description: 'Healthcare costs, childcare expenses, baby supplies'
+    });
+    console.log('👶 [Detection] New baby detected based on childcare/medical expenses');
+  }
+
+  // Detect Behavioral Changes and track transactions
+  const restaurantTransactions: number[] = [];
+  const groceryTransactions: number[] = [];
+  
+  transactionData.forEach((transaction, index) => {
+    const desc = (transaction.description || '').toLowerCase();
+    const cat = (transaction.category || '').toLowerCase();
+    
+    if (cat.includes('food') || cat.includes('restaurant') || 
+        desc.includes('restaurant') || desc.includes('uber eats') || 
+        desc.includes('doordash') || desc.includes('grubhub')) {
+      restaurantTransactions.push(index);
+    }
+    
+    if (cat.includes('grocery') || cat.includes('supermarket') ||
+        desc.includes('whole foods') || desc.includes('safeway') ||
+        desc.includes('kroger') || desc.includes('trader joe')) {
+      groceryTransactions.push(index);
+    }
+  });
+
+  const restaurantSpending = restaurantTransactions.reduce((sum, i) => sum + Math.abs(transactionData[i].amount || 0), 0);
+  const grocerySpending = groceryTransactions.reduce((sum, i) => sum + Math.abs(transactionData[i].amount || 0), 0);
+
+  console.log('🍽️ [Detection] Food spending analysis:', {
+    restaurantSpending: restaurantSpending.toFixed(2),
+    grocerySpending: grocerySpending.toFixed(2),
+    ratio: grocerySpending > 0 ? (grocerySpending / restaurantSpending).toFixed(2) : 'N/A'
+  });
+
+  // If grocery spending is significantly higher than restaurant spending, detect dietary shift
+  if (grocerySpending > restaurantSpending * 1.5) {
+    detectedAdjustments.behavioralChanges.dietaryShift = true;
+    detectedAdjustments.transactionMetadata.push({
+      adjustment: 'dietaryShift',
+      category: 'behavioralChanges',
+      transactionIndices: [...groceryTransactions, ...restaurantTransactions],
+      label: 'Dietary Shift',
+      description: 'More cooking at home, less eating out'
+    });
+    console.log('🥗 [Detection] Dietary shift detected - more grocery vs restaurant spending');
+  }
+
+  // Track Fitness transactions
+  const fitnessKeywords = ['gym', 'fitness', 'yoga', 'pilates', 'crossfit', 'peloton', 'fitbit'];
+  const fitnessTransactions: number[] = [];
+  transactionData.forEach((transaction, index) => {
+    const desc = (transaction.description || '').toLowerCase();
+    if (fitnessKeywords.some(keyword => desc.includes(keyword))) {
+      fitnessTransactions.push(index);
+    }
+  });
+  
+  if (fitnessTransactions.length > 0) {
+    detectedAdjustments.behavioralChanges.fitnessChange = true;
+    detectedAdjustments.transactionMetadata.push({
+      adjustment: 'fitnessChange',
+      category: 'behavioralChanges',
+      transactionIndices: fitnessTransactions,
+      label: 'Fitness Change',
+      description: 'Gym membership, fitness equipment, health supplements'
+    });
+    console.log('💪 [Detection] Fitness change detected based on gym/fitness expenses');
+  }
+
+  // Track Transportation transactions
+  const transportKeywords = ['uber', 'lyft', 'metro', 'transit', 'gas', 'parking'];
+  const transportTransactions: number[] = [];
+  transactionData.forEach((transaction, index) => {
+    const desc = (transaction.description || '').toLowerCase();
+    if (transportKeywords.some(keyword => desc.includes(keyword))) {
+      transportTransactions.push(index);
+    }
+  });
+  
+  if (transportTransactions.length > 0) {
+    detectedAdjustments.behavioralChanges.transportationChange = true;
+    detectedAdjustments.transactionMetadata.push({
+      adjustment: 'transportationChange',
+      category: 'behavioralChanges',
+      transactionIndices: transportTransactions,
+      label: 'Transportation Change',
+      description: 'Shift between car, transit, and rideshare usage'
+    });
+    console.log('🚗 [Detection] Transportation change detected based on transport expenses');
+  }
+
+  // Detect External Factors (always apply these as they're universal)
+  detectedAdjustments.externalFactors.inflation = true;
+  detectedAdjustments.externalFactors.seasonalAdjustments = true;
+  console.log('📈 [Detection] Applied universal external factors: inflation, seasonal adjustments');
+
+  // Track subscription transactions for social trends
+  const subscriptionKeywords = ['subscription', 'netflix', 'spotify', 'amazon prime', 'disney+', 'hulu'];
+  const subscriptionTransactions: number[] = [];
+  transactionData.forEach((transaction, index) => {
+    const desc = (transaction.description || '').toLowerCase();
+    if (subscriptionKeywords.some(keyword => desc.includes(keyword))) {
+      subscriptionTransactions.push(index);
+    }
+  });
+  
+  if (subscriptionTransactions.length > 0) {
+    detectedAdjustments.externalFactors.socialTrends = true;
+    detectedAdjustments.transactionMetadata.push({
+      adjustment: 'socialTrends',
+      category: 'externalFactors',
+      transactionIndices: subscriptionTransactions,
+      label: 'Social Trends',
+      description: 'New subscription services, travel recovery'
+    });
+    console.log('📱 [Detection] Social trends detected based on subscription services');
+  }
+
+  const detectedCount = Object.values(detectedAdjustments.lifeEvents).filter(Boolean).length +
+                       Object.values(detectedAdjustments.behavioralChanges).filter(Boolean).length +
+                       Object.values(detectedAdjustments.externalFactors).filter(Boolean).length;
+  
+  console.log(`✅ [Detection] Detected ${detectedCount} simulation adjustments to apply`);
+  
+  return detectedAdjustments;
 }
 
 function createMockAnalysis(simulatedTransactions: FallbackTransaction[]): MockAnalysis {

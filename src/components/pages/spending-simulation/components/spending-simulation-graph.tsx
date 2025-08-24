@@ -14,6 +14,8 @@ interface DataPoint {
   isRecurring?: boolean;
   type?: string;
   recurringGroup?: string; // Identifier for grouping related recurring transactions
+  adjustmentType?: string; // Which adjustment this transaction triggered
+  adjustmentCategory?: string; // lifeEvents, behavioralChanges, externalFactors
 }
 
 interface SpendingSimulationGraphProps {
@@ -22,6 +24,7 @@ interface SpendingSimulationGraphProps {
   height?: number;
   className?: string;
   isCumulative?: boolean;
+  highlightedAdjustment?: string | null; // Which adjustment to highlight
 }
 
 const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
@@ -30,6 +33,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
   height = 500,
   className = '',
   isCumulative = false,
+  highlightedAdjustment = null,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -38,6 +42,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       dataLength: data?.length || 0,
       hasData: !!data,
       isCumulative,
+      highlightedAdjustment,
       sampleData: data?.slice(0, 2)
     });
     
@@ -124,7 +129,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
         .attr('d', line);
     }
 
-    // Add transaction points with different styles for recurring vs one-time
+    // Add transaction points with different styles for recurring vs one-time and adjustment highlighting
     g.selectAll('.transaction-point')
       .data(validData)
       .enter()
@@ -132,12 +137,39 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .attr('class', 'transaction-point')
       .attr('cx', (d) => xScale(d.time))
       .attr('cy', (d) => isCumulative ? yScale(d.cumulativeBalance || d.amount) : yScale(d.amount))
-      .attr('r', 4)
-      .attr('fill', (d) => d.isRecurring ? '#10b981' : '#3b82f6') // Green for recurring, blue for one-time
-      .attr('stroke', '#ffffff')
-      .attr('stroke-width', 2)
+      .attr('r', (d) => {
+        // Larger radius for highlighted adjustment transactions
+        if (highlightedAdjustment && d.adjustmentType === highlightedAdjustment) return 6;
+        return 4;
+      })
+      .attr('fill', (d) => {
+        // Special colors for adjustment transactions
+        if (highlightedAdjustment && d.adjustmentType === highlightedAdjustment) {
+          if (d.adjustmentCategory === 'lifeEvents') return '#dc2626'; // Red for life events
+          if (d.adjustmentCategory === 'behavioralChanges') return '#ea580c'; // Orange for behavioral
+          if (d.adjustmentCategory === 'externalFactors') return '#7c3aed'; // Purple for external
+        }
+        // Default colors
+        return d.isRecurring ? '#10b981' : '#3b82f6'; // Green for recurring, blue for one-time
+      })
+      .attr('stroke', (d) => {
+        // Thicker stroke for highlighted adjustments
+        if (highlightedAdjustment && d.adjustmentType === highlightedAdjustment) return '#ffffff';
+        return '#ffffff';
+      })
+      .attr('stroke-width', (d) => {
+        // Thicker stroke for highlighted adjustments
+        if (highlightedAdjustment && d.adjustmentType === highlightedAdjustment) return 3;
+        return 2;
+      })
       .style('cursor', 'pointer')
-      .style('opacity', (d) => d.isRecurring ? 0.9 : 0.7); // Slightly more opaque for recurring
+      .style('opacity', (d) => {
+        // Full opacity for highlighted adjustments, dimmed for others when highlighting
+        if (highlightedAdjustment) {
+          return d.adjustmentType === highlightedAdjustment ? 1.0 : 0.3;
+        }
+        return d.isRecurring ? 0.9 : 0.7; // Default opacity
+      });
 
     // Calculate statistical significance for large transactions
     const amounts = validData.map(d => Math.abs(d.originalAmount || d.amount));
@@ -154,7 +186,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       : 0;
     const standardDeviation = Math.sqrt(variance);
     
-    // Define large transactions as those more than 2 standard deviations from the mean
+    // Define large transactions as those more than 2 standard deviations from the mean (outside the 95% within the mean)
     // Use a minimum threshold to avoid marking tiny variations as significant
     const statisticalThreshold = mean + (2 * standardDeviation);
     const minimumThreshold = mean * 1.5; // At least 50% above mean
@@ -229,15 +261,15 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
         // Highlight all transactions in the same recurring group
         if (dataPoint.isRecurring && dataPoint.recurringGroup) {
           g.selectAll('.transaction-point')
-            .style('opacity', (pointData: any) => {
+            .style('opacity', (pointData: unknown) => {
               const point = pointData as DataPoint;
               return point.recurringGroup === dataPoint.recurringGroup ? 1.0 : 0.3;
             })
-            .attr('stroke-width', (pointData: any) => {
+            .attr('stroke-width', (pointData: unknown) => {
               const point = pointData as DataPoint;
               return point.recurringGroup === dataPoint.recurringGroup ? 3 : 2;
             })
-            .attr('r', (pointData: any) => {
+            .attr('r', (pointData: unknown) => {
               const point = pointData as DataPoint;
               return point.recurringGroup === dataPoint.recurringGroup ? 6 : 4;
             });
@@ -304,7 +336,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
         
         // Reset all transaction points to their original state
         g.selectAll('.transaction-point')
-          .style('opacity', (d: any) => {
+          .style('opacity', (d: unknown) => {
             const point = d as DataPoint;
             return point.isRecurring ? 0.9 : 0.7;
           })
@@ -420,7 +452,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
     return () => {
       d3.select('body').selectAll('.tooltip').remove();
     };
-  }, [data, width, height, isCumulative]);
+  }, [data, width, height, isCumulative, highlightedAdjustment]);
 
   return (
     <div className={`spending-simulation-graph w-full ${className}`}>

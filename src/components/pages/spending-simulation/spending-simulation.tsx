@@ -93,6 +93,22 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
   const [isPaused, setIsPaused] = useState(false);
   const [showRecurringOnly, setShowRecurringOnly] = useState(false);
   const [showOneTimeOnly, setShowOneTimeOnly] = useState(false);
+  
+  // Detected simulation adjustments (read-only, from API)
+  interface DetectedAdjustments {
+    lifeEvents?: Record<string, boolean>;
+    behavioralChanges?: Record<string, boolean>;
+    externalFactors?: Record<string, boolean>;
+    transactionMetadata?: Array<{
+      adjustment: string;
+      category: string;
+      transactionIndices: number[];
+      label: string;
+      description: string;
+    }>;
+  }
+  const [detectedAdjustments, setDetectedAdjustments] = useState<DetectedAdjustments | null>(null);
+  const [highlightedAdjustment, setHighlightedAdjustment] = useState<string | null>(null);
 
   const handleConnectBanks = () => {
     setIsModalOpen(true);
@@ -301,6 +317,34 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
     return data; // Show all transactions
   };
 
+  // Get adjustment display info
+  const getAdjustmentDisplayInfo = (category: string, key: string): { label: string; description: string; icon: string } => {
+    const displayInfo: Record<string, Record<string, { label: string; description: string; icon: string }>> = {
+      lifeEvents: {
+        recentMove: { label: 'Recent Move', description: 'Furniture purchases, moving costs, home setup expenses', icon: '🏠' },
+        newMarriage: { label: 'New Marriage', description: 'Wedding expenses, ring purchases, honeymoon costs', icon: '💒' },
+        newBaby: { label: 'New Baby', description: 'Healthcare costs, childcare expenses, baby supplies', icon: '👶' },
+        jobChange: { label: 'Job Change', description: 'Commuting adjustments, relocation expenses, income changes', icon: '💼' },
+        graduation: { label: 'Graduation', description: 'Eliminate tuition, increase discretionary spending', icon: '🎓' }
+      },
+      behavioralChanges: {
+        dietaryShift: { label: 'Dietary Shift', description: 'More cooking at home, less eating out', icon: '🥗' },
+        fitnessChange: { label: 'Fitness Change', description: 'Gym membership, fitness equipment, health supplements', icon: '💪' },
+        transportationChange: { label: 'Transportation Change', description: 'Shift between car, transit, and rideshare usage', icon: '🚗' },
+        entertainmentShift: { label: 'Entertainment Shift', description: 'More streaming subscriptions, less going out', icon: '🎬' }
+      },
+      externalFactors: {
+        inflation: { label: 'Inflation Adjustments', description: 'Increased costs for groceries, utilities, and general goods', icon: '📈' },
+        interestRates: { label: 'Interest Rate Changes', description: 'Adjusted loan payments and credit card interest', icon: '💰' },
+        seasonalAdjustments: { label: 'Seasonal Patterns', description: 'Higher utilities in summer/winter, holiday spending', icon: '🌡️' },
+        socialTrends: { label: 'Social Trends', description: 'New subscription services, travel recovery', icon: '📱' },
+        economicConditions: { label: 'Economic Conditions', description: 'Adjusted discretionary spending based on economic outlook', icon: '🌍' }
+      }
+    };
+    
+    return displayInfo[category]?.[key] || { label: key, description: 'Adjustment detected', icon: '⚙️' };
+  };
+
   const handleTestingMode = async () => {
     setHasConnectedData(true);
     setIsAnalyzing(true);
@@ -407,7 +451,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
         });
       }
 
-      // Prepare request data
+      // Prepare request data (no need to send adjustments, API will detect them)
       const requestData = {
         transactionData,
         debtData,
@@ -445,17 +489,24 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
       }
 
       console.log('🔄 [Client] Parsing API response...');
-      const analysis: LLMAnalysis = await response.json();
+      const analysis: LLMAnalysis & { detectedAdjustments?: DetectedAdjustments } = await response.json();
       
       console.log('✅ [Client] Analysis received:', {
         simulatedTransactions: analysis.simulatedTransactions?.length || 0,
         insights: !!analysis.insights,
         summary: !!analysis.summary,
         projectedTotalIncome: analysis.summary?.projectedTotalIncome,
-        projectedTotalExpenses: analysis.summary?.projectedTotalExpenses
+        projectedTotalExpenses: analysis.summary?.projectedTotalExpenses,
+        detectedAdjustments: !!analysis.detectedAdjustments
       });
 
       setLlmAnalysis(analysis);
+      
+      // Store detected adjustments
+      if (analysis.detectedAdjustments) {
+        setDetectedAdjustments(analysis.detectedAdjustments);
+        console.log('🔍 [Client] Detected adjustments:', analysis.detectedAdjustments);
+      }
 
       // Convert LLM analysis to graph data - plot individual transaction amounts
       console.log('📈 [Client] Converting analysis to graph data...');
@@ -468,12 +519,28 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
       // Identify recurring patterns in the transactions
       const transactionsWithRecurringAnalysis = identifyRecurringTransactions(sortedTransactions);
 
+      // Create adjustment lookup for transaction metadata
+      const adjustmentLookup = new Map<number, { adjustment: string; category: string }>();
+      if (analysis.detectedAdjustments?.transactionMetadata) {
+        analysis.detectedAdjustments.transactionMetadata.forEach(metadata => {
+          metadata.transactionIndices.forEach(index => {
+            adjustmentLookup.set(index, {
+              adjustment: metadata.adjustment,
+              category: metadata.category
+            });
+          });
+        });
+        console.log('🏷️ [Client] Created adjustment lookup with', adjustmentLookup.size, 'entries');
+      }
+
       // Create graph data with both individual and cumulative amounts
       let cumulativeTotal = 0; // Start from 0
       const graphData: DataPoint[] = transactionsWithRecurringAnalysis
         .filter(transaction => transaction && transaction.date && transaction.amount !== undefined)
-        .map(transaction => {
+        .map((transaction, index) => {
           cumulativeTotal += Math.abs(transaction.amount); // Add absolute value of transaction amount
+          
+          const adjustmentInfo = adjustmentLookup.get(index);
           
           return {
             time: new Date(transaction.date),
@@ -485,7 +552,9 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
             confidence: transaction.confidence || 0,
             isRecurring: transaction.isRecurring || false,
             type: transaction.type || 'Debit',
-            recurringGroup: transaction.recurringGroup
+            recurringGroup: transaction.recurringGroup,
+            adjustmentType: adjustmentInfo?.adjustment,
+            adjustmentCategory: adjustmentInfo?.category
           };
         });
 
@@ -689,6 +758,135 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
             </section>
           ) : hasConnectedData ? (
             <>
+              {/* Detected Adjustments Section */}
+              {detectedAdjustments && (
+                <section className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                    Detected Simulation Adjustments
+                  </h2>
+                  <p className="text-gray-600 mb-6">
+                    Based on your transaction history, we&apos;ve detected the following factors affecting your spending simulation.
+                  </p>
+                  
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Life Events */}
+                    {Object.entries(detectedAdjustments.lifeEvents || {}).filter(([, active]) => active).length > 0 && (
+                      <div className="space-y-4">
+                        <h3 className="font-semibold text-gray-800 flex items-center">
+                          <svg className="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Life Events
+                        </h3>
+                        <div className="space-y-3">
+                          {Object.entries(detectedAdjustments.lifeEvents || {})
+                            .filter(([, active]) => active)
+                            .map(([key]) => {
+                              const info = getAdjustmentDisplayInfo('lifeEvents', key);
+                              return (
+                                <div 
+                                  key={key} 
+                                  className="flex items-start space-x-3 p-3 bg-blue-50 rounded-lg border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors"
+                                  onMouseEnter={() => setHighlightedAdjustment(key)}
+                                  onMouseLeave={() => setHighlightedAdjustment(null)}
+                                >
+                                  <span className="text-lg">{info.icon}</span>
+                                  <div>
+                                    <div className="font-medium text-blue-900">{info.label}</div>
+                                    <div className="text-sm text-blue-700">{info.description}</div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Behavioral Changes */}
+                    {Object.entries(detectedAdjustments.behavioralChanges || {}).filter(([, active]) => active).length > 0 && (
+                      <div className="space-y-4">
+                        <h3 className="font-semibold text-gray-800 flex items-center">
+                          <svg className="w-5 h-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                          </svg>
+                          Behavioral Changes
+                        </h3>
+                        <div className="space-y-3">
+                          {Object.entries(detectedAdjustments.behavioralChanges || {})
+                            .filter(([, active]) => active)
+                            .map(([key]) => {
+                              const info = getAdjustmentDisplayInfo('behavioralChanges', key);
+                              return (
+                                <div 
+                                  key={key} 
+                                  className="flex items-start space-x-3 p-3 bg-green-50 rounded-lg border border-green-200 cursor-pointer hover:bg-green-100 transition-colors"
+                                  onMouseEnter={() => setHighlightedAdjustment(key)}
+                                  onMouseLeave={() => setHighlightedAdjustment(null)}
+                                >
+                                  <span className="text-lg">{info.icon}</span>
+                                  <div>
+                                    <div className="font-medium text-green-900">{info.label}</div>
+                                    <div className="text-sm text-green-700">{info.description}</div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* External Factors */}
+                    {Object.entries(detectedAdjustments.externalFactors || {}).filter(([, active]) => active).length > 0 && (
+                      <div className="space-y-4">
+                        <h3 className="font-semibold text-gray-800 flex items-center">
+                          <svg className="w-5 h-5 mr-2 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          External Factors
+                        </h3>
+                        <div className="space-y-3">
+                          {Object.entries(detectedAdjustments.externalFactors || {})
+                            .filter(([, active]) => active)
+                            .map(([key]) => {
+                              const info = getAdjustmentDisplayInfo('externalFactors', key);
+                              return (
+                                <div 
+                                  key={key} 
+                                  className="flex items-start space-x-3 p-3 bg-orange-50 rounded-lg border border-orange-200 cursor-pointer hover:bg-orange-100 transition-colors"
+                                  onMouseEnter={() => setHighlightedAdjustment(key)}
+                                  onMouseLeave={() => setHighlightedAdjustment(null)}
+                                >
+                                  <span className="text-lg">{info.icon}</span>
+                                  <div>
+                                    <div className="font-medium text-orange-900">{info.label}</div>
+                                    <div className="text-sm text-orange-700">{info.description}</div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Show message if no adjustments detected */}
+                  {(!detectedAdjustments.lifeEvents || Object.values(detectedAdjustments.lifeEvents).every(v => !v)) &&
+                   (!detectedAdjustments.behavioralChanges || Object.values(detectedAdjustments.behavioralChanges).every(v => !v)) &&
+                   (!detectedAdjustments.externalFactors || Object.values(detectedAdjustments.externalFactors).every(v => !v)) && (
+                    <div className="text-center py-8">
+                      <div className="text-gray-500 mb-2">
+                        <svg className="w-12 h-12 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <p className="text-gray-600">
+                        No specific life events or behavioral changes detected. Using standard spending patterns with inflation and seasonal adjustments.
+                      </p>
+                    </div>
+                  )}
+                </section>
+              )}
+
               {/* Graph Section */}
               <section className="bg-gray-50 rounded-lg p-6">
                                 <div className="flex justify-between items-center mb-4">
@@ -796,6 +994,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                         height={500}
                         className="w-full min-w-full"
                         isCumulative={isCumulative}
+                        highlightedAdjustment={highlightedAdjustment}
                       />
                     );
                   })()}
