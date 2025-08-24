@@ -1,0 +1,466 @@
+{
+  "CHASE_FREEDOM_UNLIMITED": {
+    "rewards": [
+      {
+        "name": "Chase Travel",
+        "multiplier": 5,
+        "description": null,
+        "category": "travel_general"
+      },
+      {
+        "name": "Dining at Restaurants",
+        "multiplier": 3,
+        "description": "including takeout and eligible delivery services.",
+        "category": "dining"
+      },
+      {
+        "name": "Drugstores",
+        "multiplier": 3,
+        "description": null,
+        "category": "drugstores_and_pharmacies"
+      },
+      {
+        "name": "Lyft",
+        "multiplier": 2,
+        "description": "through 09/30/2027.",
+        "category": "transit_and_rideshare"
+      },
+      {
+        "name": "All Other Purchases",
+        "multiplier": 1.5,
+        "description": null,
+        "category": "catch_all_general_purchases"
+      }
+    ],
+    "credits": [
+      {
+        "name": "6 Months DashPass",
+        "description": "Enjoy 6 months of complimentary DashPass for DoorDash and Caviar when activated between 02/01/2025 and 12/31/2027. Card must be added as default payment and used at checkout.",
+        "annualCredit": null,
+        "recurringRateTimesInYear": null
+      },
+      {
+        "name": "DoorDash Non-Restaurant Discount",
+        "description": "Get $10 off one non-restaurant DoorDash order per calendar quarter while enrolled in DashPass with your Freedom Unlimited card.",
+        "annualCredit": 40,
+        "recurringRateTimesInYear": 4
+      }
+    ],
+    "targetCreditScore": "690-850",
+    "signUpBonus": "Earn a $200 bonus after you spend $500 on purchases in the first 3 months from account opening."
+  },
+  "WELLS_FARGO_ACTIVE_CASH": {
+    "rewards": [
+      {
+        "name": "All Other Purchases",
+        "multiplier": 2,
+        "description": "on all eligible net purchases",
+        "category": "catch_all_general_purchases"
+      }
+    ],
+    "credits": [
+      {
+        "name": "Cellular Telephone Protection (Up to $600 of cell phone protection against damage or theft. Subject to a $25 deductible",
+        "description": "Up to $600 of cell phone protection against damage or theft. Subject to a $25 deductible",
+        "annualCredit": 600,
+        "recurringRateTimesInYear": null
+      },
+      {
+        "name": "Auto Rental Collision Damage Waiver (get reimbursed for covered damage or theft)",
+        "description": "get reimbursed for covered damage or theft",
+        "annualCredit": null,
+        "recurringRateTimesInYear": null
+      }
+    ],
+    "targetCreditScore": "690-850",
+    "signUpBonus": "Earn a $200 cash rewards bonus when you spend $500 in purchases in the first 3 months."
+  },
+  "CAPITAL_ONE_SAVOR_REWARDS": {
+    "rewards": [
+      {
+        "name": "Capital One Entertainment",
+        "multiplier": 8,
+        "description": "8% cash back on purchases made through the Capital One Entertainment ticketing platform",
+        "category": "entertainment_and_recreation"
+      },
+      {
+        "name": "Capital One Travel (Hotels and Rental Cars)",
+        "multiplier": 5,
+        "description": "5% cash back on hotels and rental cars booked through Capital One Travel",
+        "category": "travel_hotels"
+      },
+      {
+        "name": "Dining",
+        "multiplier": 3,
+        "description": "3% cash back on dining purchases",
+        "category": "dining"
+      },
+      {
+        "name": "Entertainment",
+        "multiplier": 3,
+        "description": "3% cash back on qualified entertainment purchases including movie theatres, amusement parks, aquariums, zoos, dance halls, billiard establishments, bowling alleys, and sporting events",
+        "category": "entertainment_and_recreation"
+      },
+      {
+        "name": "Streaming Services",
+        "multiplier": 3,
+        "description": "3% cash back on eligible music and video streaming services",
+        "category": "streaming_services"
+      },
+      {
+        "name": "Grocery Stores",
+        "multiplier": 3,
+        "description": "3% cash back on purchases made at grocery stores (excluding warehouse clubs, discount stores, and super stores)",
+        "category": "grocery"
+      },
+      {
+        "name": "All Other Purchases",
+        "multiplier": 1,
+        "description": "1% cash back on All Other Purchases",
+        "category": "catch_all_general_purchases"
+      }
+    ],
+    "credits": [],
+    "targetCreditScore": "690-850",
+    "signUpBonus": "Earn $200 once you spend $500 within 3 months from account opening."
+  },
+  "CITI_DOUBLE_CASH": {
+    "rewards": [
+      {
+        "name": "Citi Travel Portal (through 12/31/2025)",
+        "multiplier": 5,
+        "description": "Earn 5X points.",
+        "category": "travel_general"
+      },
+      {
+        "name": "All Other Purchases",
+        "multiplier": 2,
+        "description": "Earn 1X point/$1 spent on purchases + 1X point/$1 paid on your purchase balance",
+        "category": "catch_all_general_purchases"
+      }
+    ],
+    "credits": [],
+    "targetCreditScore": "630-850",
+    "signUpBonus": "Earn $200 cash back after you spend $1,500 on purchases in the first 6 months."
+  },
+  "CHASE_SAPPHIRE_RESERVE": {
+    "rewards": [
+      {
+        "name": "All Chase Travel",
+        "multiplier": 8,
+        "description": "after the $300 Annual Travel Credit.",
+        "category": "travel_general"
+      },
+      {
+        "name": "Flights",
+        "multiplier": 4,
+        "description": "after the $300 Annual Travel Credit.",
+        "category": "travel_flights"
+      },
+      {
+        "name": "Hotels",
+        "multiplier": 4,
+        "description": "after the $300 Annual Travel Credit.",
+        "category": "travel_hotels"
+      },
+      {
+        "name": "Dining",
+        "multiplier": 3,
+        "description": "including takeout and eligible delivery services.",
+        "category": "dining"
+      },
+      {
+        "name": "Lyft",
+        "multiplier": 5,
+        "description": "through 09-30-2027.",
+        "category": "transit_and_rideshare"
+      },
+      {
+        "name": "Peloton Equipment and Accessories",
+        "multiplier": 10,
+        "description": "through 12-31-2027.",
+        "category": "fitness_and_wellness"
+      },
+      {
+        "name": "All Other Purchases",
+        "multiplier": 1,
+        "description": null,
+        "category": "catch_all_general_purchases"
+      }
+    ],
+    "credits": [
+      {
+        "name": "Annual Travel Credit",
+        "description": "Receive up to $300 in statement credits each year for travel purchases. Travel purchases that qualify for this credit do not earn points.",
+        "annualCredit": 300,
+        "recurringRateTimesInYear": 1
+      },
+      {
+        "name": "Annual Dining Credit (Sapphire Exclusive Tables)",
+        "description": "Receive two $150 credits (one in January-June & one in July-December).",
+        "annualCredit": 300,
+        "recurringRateTimesInYear": 2
+      },
+      {
+        "name": "Annual Chase Portal Hotel Credit",
+        "description": "Receive two $250 credits (one in January-June & one in July-December).",
+        "annualCredit": 500,
+        "recurringRateTimesInYear": 2
+      },
+      {
+        "name": "Annual StubHub Credit (through 12-31-2027)",
+        "description": "Receive two $150 credits (one in January-June & one in July-December) through 12/31/2027.",
+        "annualCredit": 300,
+        "recurringRateTimesInYear": 2
+      },
+      {
+        "name": "Monthly Lyft Credit (through 09-30-2027)",
+        "description": "$10 per month through 09-30-2027",
+        "annualCredit": 120,
+        "recurringRateTimesInYear": 12
+      },
+      {
+        "name": "Monthly Peloton Membership Credit (through 12-31-2027)",
+        "description": "$10 per month through 12-31-2027",
+        "annualCredit": 120,
+        "recurringRateTimesInYear": 12
+      },
+      {
+        "name": "Priority Pass Select Membership",
+        "description": "Complimentary Priority Pass™ Select membership with access to airport lounges and select airport experiences for the primary cardholder and up to 2 guests. Enrollment required.",
+        "annualCredit": null,
+        "recurringRateTimesInYear": null
+      },
+      {
+        "name": "Chase Sapphire Lounge",
+        "description": "Full access to all Chase Sapphire Lounges",
+        "annualCredit": null,
+        "recurringRateTimesInYear": null
+      },
+      {
+        "name": "Global Entry, TSA PreCheck® or NEXUS Credit",
+        "description": "Receive up to $120 in statement credits every 4 years when the application fee is charged to your card for Global Entry, TSA PreCheck®, or NEXUS.",
+        "annualCredit": 120,
+        "recurringRateTimesInYear": 0.25
+      },
+      {
+        "name": "Complimentary DashPass",
+        "description": "Get at least 12 months of complimentary DashPass for DoorDash and Caviar when activated with your Chase Sapphire Reserve card by 12/31/2027. Enrollment and default payment method required.",
+        "annualCredit": null,
+        "recurringRateTimesInYear": null
+      },
+      {
+        "name": "DashPass Restaurant Discount",
+        "description": "Get $5 off one eligible restaurant order per month on DoorDash while enrolled in DashPass with Chase Sapphire Reserve.",
+        "annualCredit": 60,
+        "recurringRateTimesInYear": 12
+      },
+      {
+        "name": "DashPass Non-Restaurant Discount",
+        "description": "Get two $10 discounts per month on eligible non-restaurant DoorDash orders while enrolled in DashPass with Chase Sapphire Reserve.",
+        "annualCredit": 240,
+        "recurringRateTimesInYear": 12
+      },
+      {
+        "name": "Complimentary Annual Apple TV+ and Apple Music Subscriptions (~$250 value) (through 6/22/2027)",
+        "description": "$250 in Apple TV+ and Apple Music subscriptions",
+        "annualCredit": 250,
+        "recurringRateTimesInYear": 1
+      },
+      {
+        "name": "IHG One Rewards Platinum Elite Status",
+        "description": "Receive IHG One Rewards Platinum Elite Status",
+        "annualCredit": null,
+        "recurringRateTimesInYear": null
+      },
+      {
+        "name": "IHG One Rewards Diamond Elite Status (After $75k spend)",
+        "description": "Receive IHG One Rewards Diamond Elite Status",
+        "annualCredit": null,
+        "recurringRateTimesInYear": null
+      },
+      {
+        "name": "$250 Credit for Chase Shopping (The Shops) (after $75k spend)",
+        "description": "After meeting the $75,000 spend requirements as described above, you, as the primary cardmember, will have statement credits automatically applied to your account for purchases at The Shops at Chase, up to a maximum accumulation of $250 for the remainder of the calendar year in which you qualify through the following calendar year. The most you can have available at one time is $500 in statement credits if you qualify in consecutive years. ",
+        "annualCredit": null,
+        "recurringRateTimesInYear": null
+      },
+      {
+        "name": "$500 Southwest Airlines Chase Travel Credit (after $75k spend)",
+        "description": "fter meeting the $75,000 spend requirements as described above, you, as the primary cardmember, will have statement credits automatically applied to your account for Southwest Airlines purchases made on Chase Travel, up to a maximum accumulation of $500 for the remainder of the calendar year in which you qualify expiring at the end of the following calendar year. The most you can have available at one time is $1,000 in statement credits if you qualify in consecutive years.",
+        "annualCredit": null,
+        "recurringRateTimesInYear": null
+      },
+      {
+        "name": "Southwest Airlines Rapid Rewards A-List Status (after $75k spend)",
+        "description": "After meeting the $75,000 spend requirements as described above, you, as the primary cardmember, will be eligible for Southwest Rapid Rewards A-List status for the remainder of the calendar year in which you qualify through the following calendar year (expiring on December 31st of that year). After qualifying, you must activate this benefit by linking your Southwest Rapid Rewards membership on Chase.comOpens in a new window or the Chase Mobile® app.",
+        "annualCredit": null,
+        "recurringRateTimesInYear": null
+      }
+    ],
+    "targetCreditScore": "720-850",
+    "signUpBonus": "100,000 bonus points + $500 Chase Travel Credit after you spend $5,000 on purchases in the first 3 months from account opening."
+  },
+  "AMEX_GOLD": {
+    "rewards": [
+      {
+        "name": "Restaurants",
+        "multiplier": 4,
+        "description": "up to $50,000/year then 1x (includes Uber Eats)",
+        "category": "dining"
+      },
+      {
+        "name": "U.S. Supermarkets",
+        "multiplier": 4,
+        "description": "up to $25,000/year then 1x (includes Uber Eats)",
+        "category": "grocery"
+      },
+      {
+        "name": "Flights",
+        "multiplier": 3,
+        "description": null,
+        "category": "travel_flights"
+      },
+      {
+        "name": "Amex Travel",
+        "multiplier": 2,
+        "description": "eligible prepaid hotels, prepaid car rentals, or cruise reservations booked through Amex Travel",
+        "category": "travel_general"
+      },
+      {
+        "name": "Other Eligible Purchases",
+        "multiplier": 1,
+        "description": null,
+        "category": "catch_all_general_purchases"
+      }
+    ],
+    "credits": [
+      {
+        "name": "Resy Credit",
+        "description": "Up to $100 per year in statement credits for eligible Resy purchases: up to $50 in credits from January through June and up to $50 from July through December. Enrollment required.",
+        "annualCredit": 100,
+        "recurringRateTimesInYear": 2
+      },
+      {
+        "name": "Dining Credit",
+        "description": "Up to $120 per year in statement credits for eligible purchases at participating partners (Grubhub, The Cheesecake Factory, Goldbelly, Wine.com, and Five Guys). Up to $10 per month. Enrollment required.",
+        "annualCredit": 120,
+        "recurringRateTimesInYear": 12
+      },
+      {
+        "name": "Uber Cash",
+        "description": "Up to $120 per year in Uber Cash ($10 per month) for Uber rides or Uber Eats orders in the U.S. Card must be added to Uber account and Uber Cash toggled on.",
+        "annualCredit": 120,
+        "recurringRateTimesInYear": 12
+      },
+      {
+        "name": "Dunkin' Credit",
+        "description": "Up to $84 per year in statement credits for eligible Dunkin' purchases: up to $7 per month. Enrollment required.",
+        "annualCredit": 84,
+        "recurringRateTimesInYear": 12
+      }
+    ],
+    "targetCreditScore": "690-850",
+    "signUpBonus": "100,000 Membership Rewards Points after you spend $6,000 on purchases on your new Card in your first 6 months of Card Membership OR 75,000 Membership Rewards Points after you spend $6,000 on purchases on your new Card in your first 6 months of Card Membership + Receive 20% back, up  to $350 as a statement credit on purchases made at restaurants worldwide within the first 12 months of Card Membership."
+  },
+  "AMEX_BLUE_CASH_PREFERRED": {
+    "rewards": [
+      {
+        "name": "U.S. Supermarkets",
+        "multiplier": 6,
+        "description": "up to $6,000/year then 1%.",
+        "category": "grocery"
+      },
+      {
+        "name": "U.S. Streaming Subscriptions",
+        "multiplier": 6,
+        "description": null,
+        "category": "streaming_services"
+      },
+      {
+        "name": "Transit",
+        "multiplier": 3,
+        "description": "Earn 3% cash back on transit including trains, rideshare, ferries, tolls, parking, buses, and subways (excluding airfare, car rentals, and cruises).",
+        "category": "transit_and_rideshare"
+      },
+      {
+        "name": "U.S. Gas Stations",
+        "multiplier": 3,
+        "description": "Earn 3% cash back at U.S. gas stations (excluding superstores, supermarkets, and warehouse clubs that sell gas).",
+        "category": "gas_stations"
+      },
+      {
+        "name": "All Other Purchases",
+        "multiplier": 1,
+        "description": null,
+        "category": "catch_all_general_purchases"
+      }
+    ],
+    "credits": [
+      {
+        "name": "First Year No Annual Fee",
+        "description": "First Year No Annual Fee",
+        "annualCredit": 95,
+        "recurringRateTimesInYear": null
+      },
+      {
+        "name": "Disney Bundle Credit",
+        "description": "Receive a $7 statement credit each month after using your enrolled Blue Cash Preferred Card to spend $9.99 or more in a calendar month on a qualifying Disney Bundle subscription (Disney+, Hulu, or ESPN+) purchased directly from Disneyplus.com, Hulu.com, or Plus.espn.com. Enrollment required. Maximum $84 per year.",
+        "annualCredit": 84,
+        "recurringRateTimesInYear": 12
+      }
+    ],
+    "targetCreditScore": "690-850",
+    "signUpBonus": "$300 back after you spend $3,000 in purchases on your new Card in your first 6 months of Card Membership."
+  },
+  "CAPITAL_ONE_VENTURE_X_REWARDS": {
+    "rewards": [
+      {
+        "name": "Hotels & Rental Cars (Capital One Travel)",
+        "multiplier": 10,
+        "description": "Earn 10 miles/$1.",
+        "category": "travel_hotels"
+      },
+      {
+        "name": "Flights & Vacation Rentals (Capital One Travel)",
+        "multiplier": 5,
+        "description": "Earn 5 miles/$1.",
+        "category": "travel_flights"
+      },
+      {
+        "name": "Capital One Entertainment (through 12/31/25)",
+        "multiplier": 5,
+        "description": "Earn 5 miles/$1.",
+        "category": "entertainment_and_recreation"
+      },
+      {
+        "name": "All Other Purchases",
+        "multiplier": 2,
+        "description": "Earn 2 miles/$1.",
+        "category": "catch_all_general_purchases"
+      }
+    ],
+    "credits": [
+      {
+        "name": "Travel Credit",
+        "description": "$300 Capital One Travel credit to use toward purchases made through Capital One Travel. Credit will expire on the next account open date anniversary.",
+        "annualCredit": 300,
+        "recurringRateTimesInYear": 1
+      },
+      {
+        "name": "Anniversary 10,000 Bonus Miles",
+        "description": "10,000 bonus miles after your anniversary each year, starting with your first anniversary.",
+        "annualCredit": null,
+        "recurringRateTimesInYear": 1
+      },
+      {
+        "name": "Global Entry / TSA PreCheck® Fee Credit",
+        "description": "Statement credit for Global Entry or TSA PreCheck® application fee when charged to your card. Eligible once every 4 years, up to $120.",
+        "annualCredit": 120,
+        "recurringRateTimesInYear": 0.25
+      }
+    ],
+    "targetCreditScore": "720-850",
+    "signUpBonus": "Earn 75,000 bonus miles once you spend $4,000 on purchases within the first 3 months from account opening."
+  }
+}

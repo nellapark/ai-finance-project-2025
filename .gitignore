@@ -40,6 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-#
+# test data folder is ignored because I fetched my personal data from my bank to use and create sample data
 /test-data
 /simulated-outputs

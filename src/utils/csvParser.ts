@@ -8,6 +8,7 @@ export interface TransactionData {
   type: string;
   amount: number;
   memo: string;
+  credit_card?: string;
 }
 
 export interface DebtData {
@@ -62,6 +63,7 @@ export function parseTransactionCSV(file: File): Promise<TransactionData[]> {
               type: row.Type || row.type || '',
               amount: parseFloat(row.Amount || row.amount || '0'),
               memo: row.Memo || row.memo || '',
+              credit_card: row['Credit Card'] || row.credit_card || undefined,
             };
 
             if (index < 3) {
