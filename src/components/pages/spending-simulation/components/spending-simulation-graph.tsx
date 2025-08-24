@@ -25,6 +25,8 @@ interface SpendingSimulationGraphProps {
   className?: string;
   isCumulative?: boolean;
   highlightedAdjustment?: string | null; // Which adjustment to highlight
+  toggledAdjustments?: Set<string>; // Which adjustments are persistently toggled
+  showAdjustmentDataPoints?: boolean; // Whether to show adjustment data points
 }
 
 const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
@@ -34,8 +36,24 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
   className = '',
   isCumulative = false,
   highlightedAdjustment = null,
+  toggledAdjustments = new Set(),
+  showAdjustmentDataPoints = true,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
+
+  // Helper function to get adjustment info
+  const getAdjustmentInfo = (adjustmentKey: string) => {
+    const adjustmentInfo: Record<string, { label: string; icon: string }> = {
+      recentMove: { label: 'Recent Move', icon: '🏠' },
+      newMarriage: { label: 'New Marriage', icon: '💒' },
+      newBaby: { label: 'New Baby', icon: '👶' },
+      dietaryShift: { label: 'Dietary Shift', icon: '🥗' },
+      fitnessChange: { label: 'Fitness Change', icon: '💪' },
+      transportationChange: { label: 'Transportation Change', icon: '🚗' },
+      socialTrends: { label: 'Social Trends', icon: '📱' },
+    };
+    return adjustmentInfo[adjustmentKey] || { label: adjustmentKey, icon: '⚙️' };
+  };
 
   useEffect(() => {
     console.log('🎨 [Graph] Rendering with data:', {
@@ -138,13 +156,20 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .attr('cx', (d) => xScale(d.time))
       .attr('cy', (d) => isCumulative ? yScale(d.cumulativeBalance || d.amount) : yScale(d.amount))
       .attr('r', (d) => {
-        // Larger radius for highlighted adjustment transactions
-        if (highlightedAdjustment && d.adjustmentType === highlightedAdjustment) return 6;
-        return 4;
+        // Check if this transaction is part of any active adjustment
+        const isHighlighted = highlightedAdjustment && d.adjustmentType === highlightedAdjustment;
+        const isToggled = d.adjustmentType && toggledAdjustments.has(d.adjustmentType);
+        
+        if (isHighlighted) return 8; // Extra large for hover
+        if (isToggled) return 7; // Large for toggled
+        return 4; // Default size
       })
       .attr('fill', (d) => {
-        // Special colors for adjustment transactions
-        if (highlightedAdjustment && d.adjustmentType === highlightedAdjustment) {
+        // Check if this transaction is part of any active adjustment
+        const isHighlighted = highlightedAdjustment && d.adjustmentType === highlightedAdjustment;
+        const isToggled = d.adjustmentType && toggledAdjustments.has(d.adjustmentType);
+        
+        if (isHighlighted || isToggled) {
           if (d.adjustmentCategory === 'lifeEvents') return '#dc2626'; // Red for life events
           if (d.adjustmentCategory === 'behavioralChanges') return '#ea580c'; // Orange for behavioral
           if (d.adjustmentCategory === 'externalFactors') return '#7c3aed'; // Purple for external
@@ -153,23 +178,120 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
         return d.isRecurring ? '#10b981' : '#3b82f6'; // Green for recurring, blue for one-time
       })
       .attr('stroke', (d) => {
-        // Thicker stroke for highlighted adjustments
-        if (highlightedAdjustment && d.adjustmentType === highlightedAdjustment) return '#ffffff';
+        const isHighlighted = highlightedAdjustment && d.adjustmentType === highlightedAdjustment;
+        const isToggled = d.adjustmentType && toggledAdjustments.has(d.adjustmentType);
+        
+        if (isHighlighted || isToggled) return '#ffffff';
         return '#ffffff';
       })
       .attr('stroke-width', (d) => {
-        // Thicker stroke for highlighted adjustments
-        if (highlightedAdjustment && d.adjustmentType === highlightedAdjustment) return 3;
-        return 2;
+        const isHighlighted = highlightedAdjustment && d.adjustmentType === highlightedAdjustment;
+        const isToggled = d.adjustmentType && toggledAdjustments.has(d.adjustmentType);
+        
+        if (isHighlighted) return 4; // Extra thick for hover
+        if (isToggled) return 3; // Thick for toggled
+        return 2; // Default
       })
       .style('cursor', 'pointer')
       .style('opacity', (d) => {
-        // Full opacity for highlighted adjustments, dimmed for others when highlighting
-        if (highlightedAdjustment) {
-          return d.adjustmentType === highlightedAdjustment ? 1.0 : 0.3;
+        const isHighlighted = highlightedAdjustment && d.adjustmentType === highlightedAdjustment;
+        const isToggled = d.adjustmentType && toggledAdjustments.has(d.adjustmentType);
+        
+        // Handle visibility toggle
+        if (!showAdjustmentDataPoints && (isHighlighted || isToggled)) {
+          return 0.1; // Nearly invisible when adjustment data points are hidden
         }
-        return d.isRecurring ? 0.9 : 0.7; // Default opacity
+        
+        // If we're highlighting something specific
+        if (highlightedAdjustment) {
+          return isHighlighted ? 1.0 : 0.15; // Much more dramatic contrast
+        }
+        
+        // If we have toggled adjustments, show them prominently
+        if (toggledAdjustments.size > 0) {
+          return isToggled ? 1.0 : 0.25; // More dramatic contrast for toggled
+        }
+        
+        // Default opacity
+        return d.isRecurring ? 0.9 : 0.7;
+      })
+      .style('filter', (d) => {
+        const isHighlighted = highlightedAdjustment && d.adjustmentType === highlightedAdjustment;
+        const isToggled = d.adjustmentType && toggledAdjustments.has(d.adjustmentType);
+        
+        if (!showAdjustmentDataPoints && (isHighlighted || isToggled)) {
+          return 'none'; // No special effects when hidden
+        }
+        
+        if (isHighlighted) return 'drop-shadow(0 0 12px rgba(220, 38, 38, 0.8)) drop-shadow(0 0 20px rgba(220, 38, 38, 0.4))'; // Strong red glow for hover
+        if (isToggled) return 'drop-shadow(0 0 8px rgba(220, 38, 38, 0.6)) drop-shadow(0 0 16px rgba(220, 38, 38, 0.3))'; // Medium glow for toggled
+        return 'none';
       });
+
+    // Add connecting lines and background highlighting for adjustment transactions
+    if (showAdjustmentDataPoints && (highlightedAdjustment || toggledAdjustments.size > 0)) {
+      const activeAdjustments = highlightedAdjustment ? [highlightedAdjustment] : Array.from(toggledAdjustments);
+      
+      activeAdjustments.forEach(adjustment => {
+        const adjustmentTransactions = validData.filter(d => d.adjustmentType === adjustment);
+        
+        if (adjustmentTransactions.length > 1) {
+          // Sort by time for connecting lines
+          const sortedAdjustmentTransactions = adjustmentTransactions.sort((a, b) => a.time.getTime() - b.time.getTime());
+          
+          // Add background highlight area
+          const xPositions = sortedAdjustmentTransactions.map(d => xScale(d.time));
+          const minX = Math.min(...xPositions) - 15;
+          const maxX = Math.max(...xPositions) + 15;
+          
+          g.append('rect')
+            .attr('class', 'adjustment-background')
+            .attr('x', minX)
+            .attr('y', 0)
+            .attr('width', maxX - minX)
+            .attr('height', height - margin.bottom - margin.top)
+            .attr('fill', adjustment === highlightedAdjustment ? 'rgba(220, 38, 38, 0.08)' : 'rgba(220, 38, 38, 0.04)')
+            .attr('stroke', 'rgba(220, 38, 38, 0.4)')
+            .attr('stroke-width', 2)
+            .attr('stroke-dasharray', '8,4')
+            .style('pointer-events', 'none');
+          
+          // Add connecting lines between adjustment transactions
+          const lineGenerator = d3.line<DataPoint>()
+            .x(d => xScale(d.time))
+            .y(d => isCumulative ? yScale(d.cumulativeBalance || d.amount) : yScale(d.amount))
+            .curve(d3.curveCardinal);
+          
+          g.append('path')
+            .datum(sortedAdjustmentTransactions)
+            .attr('class', 'adjustment-connection-line')
+            .attr('fill', 'none')
+            .attr('stroke', adjustment === highlightedAdjustment ? 'rgba(220, 38, 38, 0.9)' : 'rgba(220, 38, 38, 0.7)')
+            .attr('stroke-width', adjustment === highlightedAdjustment ? 4 : 3)
+            .attr('stroke-dasharray', '10,5')
+            .attr('d', lineGenerator)
+            .style('pointer-events', 'none');
+          
+          // Add labels for adjustment groups
+          const midPoint = sortedAdjustmentTransactions[Math.floor(sortedAdjustmentTransactions.length / 2)];
+          const adjustmentInfo = getAdjustmentInfo(adjustment);
+          
+          g.append('text')
+            .attr('class', 'adjustment-label')
+            .attr('x', xScale(midPoint.time))
+            .attr('y', (isCumulative ? yScale(midPoint.cumulativeBalance || midPoint.amount) : yScale(midPoint.amount)) - 25)
+            .attr('text-anchor', 'middle')
+            .attr('font-size', '14px')
+            .attr('font-weight', 'bold')
+            .attr('fill', 'rgba(220, 38, 38, 1)')
+            .attr('stroke', 'white')
+            .attr('stroke-width', 3)
+            .attr('paint-order', 'stroke')
+            .text(`${adjustmentInfo.icon} ${adjustmentInfo.label}`)
+            .style('pointer-events', 'none');
+        }
+      });
+    }
 
     // Calculate statistical significance for large transactions
     const amounts = validData.map(d => Math.abs(d.originalAmount || d.amount));
@@ -448,11 +570,16 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .style('font-size', '12px')
       .text(`Statistical Outliers (>${largeTransactionThreshold.toFixed(0)})`);
 
-    // Cleanup tooltip on component unmount
+    // Cleanup tooltip and adjustment elements on component unmount
     return () => {
       d3.select('body').selectAll('.tooltip').remove();
+      if (svgRef.current) {
+        d3.select(svgRef.current).selectAll('.adjustment-background').remove();
+        d3.select(svgRef.current).selectAll('.adjustment-connection-line').remove();
+        d3.select(svgRef.current).selectAll('.adjustment-label').remove();
+      }
     };
-  }, [data, width, height, isCumulative, highlightedAdjustment]);
+  }, [data, width, height, isCumulative, highlightedAdjustment, toggledAdjustments, showAdjustmentDataPoints]);
 
   return (
     <div className={`spending-simulation-graph w-full ${className}`}>

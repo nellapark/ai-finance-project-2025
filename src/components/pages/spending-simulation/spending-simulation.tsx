@@ -108,7 +108,9 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
     }>;
   }
   const [detectedAdjustments, setDetectedAdjustments] = useState<DetectedAdjustments | null>(null);
-  const [highlightedAdjustment, setHighlightedAdjustment] = useState<string | null>(null);
+  const [highlightedAdjustment, setHighlightedAdjustment] = useState<string | null>(null); // For hover
+  const [toggledAdjustments, setToggledAdjustments] = useState<Set<string>>(new Set()); // For persistent toggle
+  const [showAdjustmentDataPoints, setShowAdjustmentDataPoints] = useState<boolean>(true); // Toggle for showing/hiding adjustment data points
 
   const handleConnectBanks = () => {
     setIsModalOpen(true);
@@ -343,6 +345,29 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
     };
     
     return displayInfo[category]?.[key] || { label: key, description: 'Adjustment detected', icon: '⚙️' };
+  };
+
+  // Handle adjustment toggle (persistent highlighting)
+  const handleAdjustmentToggle = (adjustmentKey: string) => {
+    setToggledAdjustments(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(adjustmentKey)) {
+        newSet.delete(adjustmentKey);
+      } else {
+        newSet.add(adjustmentKey);
+      }
+      console.log('🔄 [Client] Toggled adjustment:', adjustmentKey, 'Active toggles:', Array.from(newSet));
+      return newSet;
+    });
+  };
+
+  // Get the currently active adjustment (either hovered or toggled)
+  const getActiveAdjustment = (): string | null => {
+    // Hover takes precedence over toggle for immediate feedback
+    if (highlightedAdjustment) return highlightedAdjustment;
+    // If multiple adjustments are toggled, show the first one (could be enhanced to show all)
+    if (toggledAdjustments.size > 0) return Array.from(toggledAdjustments)[0];
+    return null;
   };
 
   const handleTestingMode = async () => {
@@ -783,17 +808,36 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                             .filter(([, active]) => active)
                             .map(([key]) => {
                               const info = getAdjustmentDisplayInfo('lifeEvents', key);
+                              const isToggled = toggledAdjustments.has(key);
                               return (
                                 <div 
                                   key={key} 
-                                  className="flex items-start space-x-3 p-3 bg-blue-50 rounded-lg border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors"
+                                  className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
+                                    isToggled 
+                                      ? 'bg-blue-200 border-blue-400 shadow-md ring-2 ring-blue-300' 
+                                      : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+                                  }`}
                                   onMouseEnter={() => setHighlightedAdjustment(key)}
                                   onMouseLeave={() => setHighlightedAdjustment(null)}
+                                  onClick={() => handleAdjustmentToggle(key)}
                                 >
-                                  <span className="text-lg">{info.icon}</span>
-                                  <div>
-                                    <div className="font-medium text-blue-900">{info.label}</div>
-                                    <div className="text-sm text-blue-700">{info.description}</div>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-lg">{info.icon}</span>
+                                    {isToggled && (
+                                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
+                                    )}
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className={`font-medium ${isToggled ? 'text-blue-950' : 'text-blue-900'}`}>
+                                      {info.label}
+                                      {isToggled && <span className="ml-2 text-xs bg-blue-600 text-white px-2 py-1 rounded-full">ACTIVE</span>}
+                                    </div>
+                                    <div className={`text-sm ${isToggled ? 'text-blue-800' : 'text-blue-700'}`}>
+                                      {info.description}
+                                    </div>
+                                    <div className="text-xs text-blue-600 mt-1">
+                                      {isToggled ? 'Click to hide in graph' : 'Click to highlight in graph'}
+                                    </div>
                                   </div>
                                 </div>
                               );
@@ -816,17 +860,36 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                             .filter(([, active]) => active)
                             .map(([key]) => {
                               const info = getAdjustmentDisplayInfo('behavioralChanges', key);
+                              const isToggled = toggledAdjustments.has(key);
                               return (
                                 <div 
                                   key={key} 
-                                  className="flex items-start space-x-3 p-3 bg-green-50 rounded-lg border border-green-200 cursor-pointer hover:bg-green-100 transition-colors"
+                                  className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
+                                    isToggled 
+                                      ? 'bg-green-200 border-green-400 shadow-md ring-2 ring-green-300' 
+                                      : 'bg-green-50 border-green-200 hover:bg-green-100'
+                                  }`}
                                   onMouseEnter={() => setHighlightedAdjustment(key)}
                                   onMouseLeave={() => setHighlightedAdjustment(null)}
+                                  onClick={() => handleAdjustmentToggle(key)}
                                 >
-                                  <span className="text-lg">{info.icon}</span>
-                                  <div>
-                                    <div className="font-medium text-green-900">{info.label}</div>
-                                    <div className="text-sm text-green-700">{info.description}</div>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-lg">{info.icon}</span>
+                                    {isToggled && (
+                                      <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse"></div>
+                                    )}
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className={`font-medium ${isToggled ? 'text-green-950' : 'text-green-900'}`}>
+                                      {info.label}
+                                      {isToggled && <span className="ml-2 text-xs bg-green-600 text-white px-2 py-1 rounded-full">ACTIVE</span>}
+                                    </div>
+                                    <div className={`text-sm ${isToggled ? 'text-green-800' : 'text-green-700'}`}>
+                                      {info.description}
+                                    </div>
+                                    <div className="text-xs text-green-600 mt-1">
+                                      {isToggled ? 'Click to hide in graph' : 'Click to highlight in graph'}
+                                    </div>
                                   </div>
                                 </div>
                               );
@@ -849,17 +912,36 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                             .filter(([, active]) => active)
                             .map(([key]) => {
                               const info = getAdjustmentDisplayInfo('externalFactors', key);
+                              const isToggled = toggledAdjustments.has(key);
                               return (
                                 <div 
                                   key={key} 
-                                  className="flex items-start space-x-3 p-3 bg-orange-50 rounded-lg border border-orange-200 cursor-pointer hover:bg-orange-100 transition-colors"
+                                  className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
+                                    isToggled 
+                                      ? 'bg-orange-200 border-orange-400 shadow-md ring-2 ring-orange-300' 
+                                      : 'bg-orange-50 border-orange-200 hover:bg-orange-100'
+                                  }`}
                                   onMouseEnter={() => setHighlightedAdjustment(key)}
                                   onMouseLeave={() => setHighlightedAdjustment(null)}
+                                  onClick={() => handleAdjustmentToggle(key)}
                                 >
-                                  <span className="text-lg">{info.icon}</span>
-                                  <div>
-                                    <div className="font-medium text-orange-900">{info.label}</div>
-                                    <div className="text-sm text-orange-700">{info.description}</div>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-lg">{info.icon}</span>
+                                    {isToggled && (
+                                      <div className="w-2 h-2 bg-orange-600 rounded-full animate-pulse"></div>
+                                    )}
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className={`font-medium ${isToggled ? 'text-orange-950' : 'text-orange-900'}`}>
+                                      {info.label}
+                                      {isToggled && <span className="ml-2 text-xs bg-orange-600 text-white px-2 py-1 rounded-full">ACTIVE</span>}
+                                    </div>
+                                    <div className={`text-sm ${isToggled ? 'text-orange-800' : 'text-orange-700'}`}>
+                                      {info.description}
+                                    </div>
+                                    <div className="text-xs text-orange-600 mt-1">
+                                      {isToggled ? 'Click to hide in graph' : 'Click to highlight in graph'}
+                                    </div>
                                   </div>
                                 </div>
                               );
@@ -890,9 +972,28 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
               {/* Graph Section */}
               <section className="bg-gray-50 rounded-lg p-6">
                                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-semibold text-gray-800">
-                  Your Spending Projection
-                </h2>
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-800">
+                      Your Spending Projection
+                    </h2>
+                    {toggledAdjustments.size > 0 && (
+                      <div className="flex items-center space-x-2 mt-1">
+                        <span className="text-sm text-gray-600">Highlighting:</span>
+                        {Array.from(toggledAdjustments).map(adjustment => {
+                          const info = getAdjustmentDisplayInfo('', adjustment);
+                          return (
+                            <span 
+                              key={adjustment}
+                              className="inline-flex items-center space-x-1 px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full"
+                            >
+                              <span>{info.icon}</span>
+                              <span>{info.label}</span>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex items-center space-x-6">
                     {/* Animation Controls */}
                     {(isAnimating || fullData.length > 0) && (
@@ -940,6 +1041,26 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                         </button>
                         <span className="text-sm text-gray-600">Cumulative</span>
                       </div>
+
+                      {/* Adjustment Data Points Toggle */}
+                      {toggledAdjustments.size > 0 && (
+                        <div className="flex items-center space-x-3 border-l border-gray-300 pl-6">
+                          <span className="text-sm text-gray-600">Hide Adjustments</span>
+                          <button
+                            onClick={() => setShowAdjustmentDataPoints(!showAdjustmentDataPoints)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${
+                              showAdjustmentDataPoints ? 'bg-orange-600' : 'bg-gray-200'
+                            }`}
+                          >
+                            <span
+                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                showAdjustmentDataPoints ? 'translate-x-6' : 'translate-x-1'
+                              }`}
+                            />
+                          </button>
+                          <span className="text-sm text-gray-600">Show Adjustments</span>
+                        </div>
+                      )}
                       
                       <div className="flex items-center space-x-4">
                         <span className="text-sm text-gray-600 font-medium">Filter:</span>
@@ -995,6 +1116,8 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                         className="w-full min-w-full"
                         isCumulative={isCumulative}
                         highlightedAdjustment={highlightedAdjustment}
+                        toggledAdjustments={toggledAdjustments}
+                        showAdjustmentDataPoints={showAdjustmentDataPoints}
                       />
                     );
                   })()}

@@ -91,6 +91,15 @@ export async function POST(request: NextRequest) {
     console.log('📝 [API] Creating analysis prompt...');
     const prompt = createAnalysisPrompt(transactionData, debtData, adjustmentsToUse);
     
+    // Estimate token count (rough approximation: 1 token ≈ 4 characters for English text)
+    const estimatedTokens = Math.ceil(prompt.length / 4);
+    
+    console.log('📏 [API] Prompt statistics:', {
+      characters: prompt.length,
+      estimatedTokens: estimatedTokens,
+      estimatedCost: `~$${(estimatedTokens * 0.0025 / 1000).toFixed(4)}` // GPT-4o input pricing
+    });
+    
     console.log('📏 [API] Prompt length:', prompt.length, 'characters');
     console.log('🔍 [API] Prompt preview (first 500 chars):', prompt.substring(0, 500) + '...');
 
@@ -127,6 +136,28 @@ export async function POST(request: NextRequest) {
       finishReason: completion.choices[0]?.finish_reason,
       responseLength: completion.choices[0]?.message?.content?.length || 0
     });
+    
+    // Log detailed token usage and costs
+    if (completion.usage) {
+      const inputTokens = completion.usage.prompt_tokens || 0;
+      const outputTokens = completion.usage.completion_tokens || 0;
+      const totalTokens = completion.usage.total_tokens || 0;
+      
+      // GPT-4o pricing (as of 2024): $0.0025/1K input tokens, $0.01/1K output tokens
+      const inputCost = (inputTokens * 0.0025) / 1000;
+      const outputCost = (outputTokens * 0.01) / 1000;
+      const totalCost = inputCost + outputCost;
+      
+      console.log('💰 [API] Token usage and costs:', {
+        inputTokens: inputTokens.toLocaleString(),
+        outputTokens: outputTokens.toLocaleString(),
+        totalTokens: totalTokens.toLocaleString(),
+        inputCost: `$${inputCost.toFixed(4)}`,
+        outputCost: `$${outputCost.toFixed(4)}`,
+        totalCost: `$${totalCost.toFixed(4)}`,
+        estimatedVsActual: `Estimated: ${estimatedTokens.toLocaleString()} vs Actual: ${inputTokens.toLocaleString()}`
+      });
+    }
 
     const analysisResult = completion.choices[0].message.content;
     
@@ -190,9 +221,9 @@ export async function POST(request: NextRequest) {
       // Try to extract partial data or create fallback
       console.log('🔄 [API] Attempting to create fallback analysis due to JSON parse error');
       
-      // Create a basic fallback analysis
-      const fallbackTransactions = generateFallbackTransactions(transactionData, debtData);
-      analysis = createMockAnalysis(fallbackTransactions);
+             // Create a basic fallback analysis
+       const fallbackTransactions = generateFallbackTransactions(transactionData, debtData, detectedAdjustments);
+       analysis = createMockAnalysis(fallbackTransactions);
       
       console.log('✅ [API] Created fallback analysis with', fallbackTransactions.length, 'transactions');
     }
@@ -203,7 +234,7 @@ export async function POST(request: NextRequest) {
     // Check if we have enough transactions, if not, generate fallback data
     if (!analysis.simulatedTransactions || analysis.simulatedTransactions.length < 50) {
       console.log('⚠️ [API] Insufficient transactions generated, creating fallback data');
-      analysis.simulatedTransactions = generateFallbackTransactions(transactionData, debtData);
+      analysis.simulatedTransactions = generateFallbackTransactions(transactionData, debtData, detectedAdjustments);
       console.log(`📊 [API] Generated ${analysis.simulatedTransactions.length} fallback transactions`);
     }
 
@@ -270,7 +301,7 @@ interface SimulationAdjustments {
 }
 
 function createAnalysisPrompt(transactionData: TransactionDataInput[], debtData: DebtDataInput[], simulationAdjustments?: SimulationAdjustments): string {
-  let prompt = `Analyze the following financial data and simulate individual CREDIT CARD transactions for the next 12 months. 
+  let prompt = `You are an expert financial analyst with deep understanding of spending patterns and behavioral economics. Analyze the following financial data and simulate individual CREDIT CARD transactions for the next 12 months using in-context learning from the provided examples.
 
 IMPORTANT: Generate ONLY credit card transactions. Do not include:
 - Salary deposits or income
@@ -278,7 +309,39 @@ IMPORTANT: Generate ONLY credit card transactions. Do not include:
 - Bank transfers or direct debits
 - Loan payments or debt payments
 
-Focus on credit card spending patterns, recurring subscriptions, and purchases. 
+PATTERN RECOGNITION FRAMEWORK:
+Use these examples to understand how to identify and simulate different spending patterns:
+
+1. LIFE EVENTS (One-time or short-term pattern changes):
+   Example: Recent Move
+   - Historical pattern: Regular furniture store visits (IKEA $1,200, Home Depot $850, U-Haul $300)
+   - Future simulation: Reduce furniture spending to normal levels, but increase home improvement spending
+   
+   Example: New Baby
+   - Historical pattern: Sudden increase in healthcare ($200/month), childcare setup costs
+   - Future simulation: Continue healthcare costs, add ongoing childcare expenses, baby supplies
+
+   Example: Job Change/Graduation
+   - Historical pattern: End of tuition payments, increase in professional clothing
+   - Future simulation: Higher discretionary income, professional development expenses
+
+2. BEHAVIORAL DRIFT (Gradual habit changes):
+   Example: Dietary Shift
+   - Historical pattern: Early period shows high restaurant spending, later period shows increased grocery spending
+   - Future simulation: Continue the trend toward more grocery spending, less restaurant spending
+   
+   Example: Fitness Lifestyle Change
+   - Historical pattern: New gym membership, fitness equipment purchases, supplement spending
+   - Future simulation: Continue fitness-related expenses, potentially add new fitness activities
+
+3. EXTERNAL FACTORS (Economic/social influences):
+   Example: Inflation Impact
+   - Historical pattern: Gradual increase in grocery, gas, utility costs
+   - Future simulation: Apply 3-6% annual increases to essential categories
+   
+   Example: Social Trends
+   - Historical pattern: New subscription services, increased travel spending
+   - Future simulation: Continue trend adoption, seasonal travel patterns
 
 CRITICAL: Return ONLY valid JSON. Do not include:
 - Comments (// or /* */)
@@ -460,8 +523,8 @@ Return your response as valid JSON with this exact structure:
 
   // Add simulation adjustments if provided
   if (simulationAdjustments) {
-    prompt += `\nSIMULATION ADJUSTMENTS:\n`;
-    prompt += `Apply the following adjustments to the spending simulation:\n\n`;
+    prompt += `\nDETECTED PATTERNS & ADJUSTMENTS:\n`;
+    prompt += `Based on the analysis of the historical data, apply these specific adjustments to future spending simulation:\n\n`;
     
     // Life Events
     const activeLifeEvents = Object.entries(simulationAdjustments.lifeEvents || {})
@@ -473,19 +536,34 @@ Return your response as valid JSON with this exact structure:
       activeLifeEvents.forEach(event => {
         switch(event) {
           case 'recentMove':
-            prompt += `- Recent Move: Add furniture purchases ($2000-5000), moving costs ($500-1500), home setup expenses\n`;
+            prompt += `- Recent Move DETECTED: Historical data shows furniture/moving expenses. Future simulation should:\n`;
+            prompt += `  * Reduce furniture spending to normal levels after initial setup period\n`;
+            prompt += `  * Add ongoing home improvement and maintenance costs\n`;
+            prompt += `  * Include utility setup and new service provider costs\n`;
             break;
           case 'newMarriage':
-            prompt += `- New Marriage: Include wedding expenses ($5000-15000), ring purchases ($1000-5000), honeymoon costs\n`;
+            prompt += `- New Marriage DETECTED: Historical data shows wedding-related expenses. Future simulation should:\n`;
+            prompt += `  * Reduce wedding expenses to zero after the event\n`;
+            prompt += `  * Increase joint household spending and shared activities\n`;
+            prompt += `  * Add potential honeymoon and anniversary-related expenses\n`;
             break;
           case 'newBaby':
-            prompt += `- New Baby: Add healthcare costs (+$200/month), childcare expenses ($800-2000/month), baby supplies\n`;
+            prompt += `- New Baby DETECTED: Historical data shows childcare/medical increases. Future simulation should:\n`;
+            prompt += `  * Continue and increase healthcare costs (+$200-400/month ongoing)\n`;
+            prompt += `  * Add substantial childcare expenses ($800-2000/month)\n`;
+            prompt += `  * Include ongoing baby supplies, clothing, and equipment costs\n`;
             break;
           case 'jobChange':
-            prompt += `- Job Change: Adjust commuting costs, possible relocation expenses, income level changes\n`;
+            prompt += `- Job Change DETECTED: Historical data shows employment transition. Future simulation should:\n`;
+            prompt += `  * Adjust commuting costs based on new location\n`;
+            prompt += `  * Modify lunch/coffee spending patterns\n`;
+            prompt += `  * Include professional development and networking expenses\n`;
             break;
           case 'graduation':
-            prompt += `- Graduation: Eliminate tuition payments, increase discretionary spending, add professional wardrobe costs\n`;
+            prompt += `- Graduation DETECTED: Historical data shows education completion. Future simulation should:\n`;
+            prompt += `  * Eliminate all tuition and education-related expenses\n`;
+            prompt += `  * Increase discretionary spending due to higher disposable income\n`;
+            prompt += `  * Add professional wardrobe and career development costs\n`;
             break;
         }
       });
@@ -502,16 +580,28 @@ Return your response as valid JSON with this exact structure:
       activeBehavioralChanges.forEach(change => {
         switch(change) {
           case 'dietaryShift':
-            prompt += `- Dietary Shift: Reduce restaurant spending by 40%, increase grocery spending by 25%\n`;
+            prompt += `- Dietary Shift DETECTED: Historical data shows trend from eating out to cooking. Future simulation should:\n`;
+            prompt += `  * Continue reducing restaurant/takeout spending by 30-50%\n`;
+            prompt += `  * Increase grocery spending by 25-40% with focus on quality ingredients\n`;
+            prompt += `  * Add cooking equipment and kitchen supply purchases\n`;
             break;
           case 'fitnessChange':
-            prompt += `- Fitness Change: Add gym membership ($50-100/month), fitness equipment, health supplements\n`;
+            prompt += `- Fitness Lifestyle DETECTED: Historical data shows new fitness focus. Future simulation should:\n`;
+            prompt += `  * Continue gym membership costs ($50-150/month)\n`;
+            prompt += `  * Add periodic fitness equipment and gear purchases\n`;
+            prompt += `  * Include health supplements and nutrition-related expenses\n`;
             break;
           case 'transportationChange':
-            prompt += `- Transportation Change: Adjust between car payments/gas vs public transit vs rideshare costs\n`;
+            prompt += `- Transportation Change DETECTED: Historical data shows mobility pattern shift. Future simulation should:\n`;
+            prompt += `  * Adjust fuel costs based on new transportation method\n`;
+            prompt += `  * Modify parking, tolls, and maintenance expenses accordingly\n`;
+            prompt += `  * Include public transit passes or rideshare costs as appropriate\n`;
             break;
           case 'entertainmentShift':
-            prompt += `- Entertainment Shift: Reduce going-out expenses by 50%, increase streaming subscriptions\n`;
+            prompt += `- Entertainment Shift DETECTED: Historical data shows preference change. Future simulation should:\n`;
+            prompt += `  * Reduce bar/club/event spending by 40-60%\n`;
+            prompt += `  * Increase streaming services and home entertainment costs\n`;
+            prompt += `  * Add home improvement for entertainment spaces\n`;
             break;
         }
       });
@@ -548,7 +638,14 @@ Return your response as valid JSON with this exact structure:
     }
   }
 
-  prompt += `\nBased on this data and the above adjustments, simulate individual transactions for the next 12 months by:
+  prompt += `\nIMPORTANT: For each detected adjustment above, ensure you create SPECIFIC transactions that demonstrate the pattern. For example:
+- If "Recent Move" is detected, include specific furniture store transactions, home improvement purchases, utility setup fees
+- If "Dietary Shift" is detected, include specific grocery store transactions and reduced restaurant transactions
+- If "New Baby" is detected, include specific pediatric visits, childcare payments, baby supply purchases
+
+This ensures that when users click on adjustment cards, they will see the related transactions highlighted in the graph.
+
+Based on this data and the above adjustments, simulate individual transactions for the next 12 months by:
 
 1. IDENTIFYING PATTERNS FROM HISTORICAL DATA:
    - Find ALL recurring transactions (salary, rent, utilities, subscriptions, loan payments)
@@ -655,7 +752,7 @@ interface FallbackTransaction {
   recurringPattern: string | null;
 }
 
-function generateFallbackTransactions(_transactionData: TransactionDataInput[], debtData: DebtDataInput[]): FallbackTransaction[] {
+function generateFallbackTransactions(_transactionData: TransactionDataInput[], _debtData: DebtDataInput[], _detectedAdjustments?: SimulationAdjustments): FallbackTransaction[] {
   console.log('🔄 [Fallback] Generating fallback transactions');
   
   const transactions: FallbackTransaction[] = [];
@@ -923,6 +1020,75 @@ interface TransactionMetadata {
   description: string;
 }
 
+interface SpendingTrend {
+  category: string;
+  earlyPeriodAvg: number;
+  latePeriodAvg: number;
+  changePercent: number;
+  transactionCount: number;
+}
+
+function analyzeSpendingTrends(sortedTransactions: TransactionDataInput[]): SpendingTrend[] {
+  if (sortedTransactions.length < 10) return []; // Need sufficient data
+  
+  // Split transactions into early and late periods
+  const midPoint = Math.floor(sortedTransactions.length / 2);
+  const earlyTransactions = sortedTransactions.slice(0, midPoint);
+  const lateTransactions = sortedTransactions.slice(midPoint);
+  
+  // Group by category and analyze trends
+  const categoryTrends: Record<string, SpendingTrend> = {};
+  
+  // Analyze early period
+  const earlyCategorySpending: Record<string, { total: number; count: number }> = {};
+  earlyTransactions.forEach(t => {
+    const category = (t.category || 'uncategorized').toLowerCase();
+    const amount = Math.abs(t.amount || 0);
+    if (!earlyCategorySpending[category]) {
+      earlyCategorySpending[category] = { total: 0, count: 0 };
+    }
+    earlyCategorySpending[category].total += amount;
+    earlyCategorySpending[category].count += 1;
+  });
+  
+  // Analyze late period
+  const lateCategorySpending: Record<string, { total: number; count: number }> = {};
+  lateTransactions.forEach(t => {
+    const category = (t.category || 'uncategorized').toLowerCase();
+    const amount = Math.abs(t.amount || 0);
+    if (!lateCategorySpending[category]) {
+      lateCategorySpending[category] = { total: 0, count: 0 };
+    }
+    lateCategorySpending[category].total += amount;
+    lateCategorySpending[category].count += 1;
+  });
+  
+  // Calculate trends for categories present in both periods
+  const allCategories = new Set([...Object.keys(earlyCategorySpending), ...Object.keys(lateCategorySpending)]);
+  
+  allCategories.forEach(category => {
+    const earlyData = earlyCategorySpending[category] || { total: 0, count: 0 };
+    const lateData = lateCategorySpending[category] || { total: 0, count: 0 };
+    
+    const earlyAvg = earlyData.count > 0 ? earlyData.total / earlyData.count : 0;
+    const lateAvg = lateData.count > 0 ? lateData.total / lateData.count : 0;
+    
+    if (earlyAvg > 0 || lateAvg > 0) {
+      const changePercent = earlyAvg > 0 ? ((lateAvg - earlyAvg) / earlyAvg) * 100 : (lateAvg > 0 ? 100 : 0);
+      
+      categoryTrends[category] = {
+        category,
+        earlyPeriodAvg: earlyAvg,
+        latePeriodAvg: lateAvg,
+        changePercent,
+        transactionCount: earlyData.count + lateData.count
+      };
+    }
+  });
+  
+  return Object.values(categoryTrends);
+}
+
 function detectSimulationAdjustments(transactionData: TransactionDataInput[], _debtData: DebtDataInput[]): SimulationAdjustments & { transactionMetadata?: TransactionMetadata[] } {
   const detectedAdjustments = {
     lifeEvents: {} as Record<string, boolean>,
@@ -938,10 +1104,16 @@ function detectSimulationAdjustments(transactionData: TransactionDataInput[], _d
     return detectedAdjustments;
   }
 
+  // Enhanced pattern analysis with temporal context
+  const sortedTransactions = transactionData.sort((a, b) => 
+    new Date(a.transaction_date || '').getTime() - new Date(b.transaction_date || '').getTime()
+  );
+  
+  // Analyze spending patterns over time for behavioral drift detection
+  const timeWindows = analyzeSpendingTrends(sortedTransactions);
+
   // Analyze transaction patterns to detect adjustments
   const amounts = transactionData.map(t => Math.abs(t.amount || 0));
-  const descriptions = transactionData.map(t => (t.description || '').toLowerCase());
-  const categories = transactionData.map(t => (t.category || '').toLowerCase());
   const totalSpending = amounts.reduce((sum, amount) => sum + amount, 0);
   const avgTransaction = totalSpending / amounts.length;
 
@@ -1026,7 +1198,23 @@ function detectSimulationAdjustments(transactionData: TransactionDataInput[], _d
     console.log('👶 [Detection] New baby detected based on childcare/medical expenses');
   }
 
-  // Detect Behavioral Changes and track transactions
+  // Enhanced Behavioral Changes Detection using trend analysis
+  console.log('🔍 [Detection] Analyzing behavioral changes with temporal trends...');
+  
+  // Detect dietary shifts using trend analysis
+  const foodTrends = timeWindows.filter(trend => 
+    trend.category.includes('food') || trend.category.includes('restaurant') || 
+    trend.category.includes('grocery') || trend.category.includes('dining')
+  );
+  
+  const restaurantTrend = foodTrends.find(t => 
+    t.category.includes('restaurant') || t.category.includes('dining') || t.category.includes('food')
+  );
+  const groceryTrend = foodTrends.find(t => 
+    t.category.includes('grocery') || t.category.includes('supermarket')
+  );
+  
+  // Track all food-related transactions for better visualization
   const restaurantTransactions: number[] = [];
   const groceryTransactions: number[] = [];
   
@@ -1034,39 +1222,48 @@ function detectSimulationAdjustments(transactionData: TransactionDataInput[], _d
     const desc = (transaction.description || '').toLowerCase();
     const cat = (transaction.category || '').toLowerCase();
     
-    if (cat.includes('food') || cat.includes('restaurant') || 
+    if (cat.includes('food') || cat.includes('restaurant') || cat.includes('dining') ||
         desc.includes('restaurant') || desc.includes('uber eats') || 
-        desc.includes('doordash') || desc.includes('grubhub')) {
+        desc.includes('doordash') || desc.includes('grubhub') || desc.includes('takeout')) {
       restaurantTransactions.push(index);
     }
     
     if (cat.includes('grocery') || cat.includes('supermarket') ||
         desc.includes('whole foods') || desc.includes('safeway') ||
-        desc.includes('kroger') || desc.includes('trader joe')) {
+        desc.includes('kroger') || desc.includes('trader joe') || desc.includes('costco')) {
       groceryTransactions.push(index);
     }
   });
 
+  // Detect dietary shift based on trends and current spending patterns
   const restaurantSpending = restaurantTransactions.reduce((sum, i) => sum + Math.abs(transactionData[i].amount || 0), 0);
   const grocerySpending = groceryTransactions.reduce((sum, i) => sum + Math.abs(transactionData[i].amount || 0), 0);
-
+  
   console.log('🍽️ [Detection] Food spending analysis:', {
     restaurantSpending: restaurantSpending.toFixed(2),
     grocerySpending: grocerySpending.toFixed(2),
-    ratio: grocerySpending > 0 ? (grocerySpending / restaurantSpending).toFixed(2) : 'N/A'
+    restaurantTrend: restaurantTrend?.changePercent.toFixed(1) + '%' || 'N/A',
+    groceryTrend: groceryTrend?.changePercent.toFixed(1) + '%' || 'N/A',
+    totalFoodTransactions: restaurantTransactions.length + groceryTransactions.length
   });
 
-  // If grocery spending is significantly higher than restaurant spending, detect dietary shift
-  if (grocerySpending > restaurantSpending * 1.5) {
+  // Detect dietary shift with multiple criteria
+  const dietaryShiftDetected = (
+    (grocerySpending > restaurantSpending * 1.2) || // Current spending favors groceries
+    (groceryTrend && groceryTrend.changePercent > 25) || // Grocery spending increased significantly
+    (restaurantTrend && restaurantTrend.changePercent < -25) // Restaurant spending decreased significantly
+  );
+
+  if (dietaryShiftDetected && (restaurantTransactions.length > 0 || groceryTransactions.length > 0)) {
     detectedAdjustments.behavioralChanges.dietaryShift = true;
     detectedAdjustments.transactionMetadata.push({
       adjustment: 'dietaryShift',
       category: 'behavioralChanges',
       transactionIndices: [...groceryTransactions, ...restaurantTransactions],
       label: 'Dietary Shift',
-      description: 'More cooking at home, less eating out'
+      description: 'Shift from eating out to cooking at home'
     });
-    console.log('🥗 [Detection] Dietary shift detected - more grocery vs restaurant spending');
+    console.log('🥗 [Detection] Dietary shift detected - behavioral change in food spending');
   }
 
   // Track Fitness transactions
