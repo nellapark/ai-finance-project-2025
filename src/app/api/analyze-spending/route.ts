@@ -1605,17 +1605,18 @@ function analyzeCardOpeningMilestones(transactions: FallbackTransaction[]): Card
   // Track when cards were "opened" to maintain reasonable spacing and yearly limits
   const cardOpenings: { date: Date; card: string }[] = [];
   
-  // Group potential opportunities by year to enforce 2-card limit
-  const yearlyOpportunities: Record<string, Array<{
+  // Collect all potential opportunities based on large transactions and spending clusters
+  const allOpportunities: Array<{
     date: Date;
     largeTransaction: FallbackTransaction;
     windowSpending: number;
     largeTransactionsInWindow: FallbackTransaction[];
     monthsBefore: number;
     bestCard: { name: string; details: Record<string, unknown>; score: number; spendingReq: number; totalValue: number } | null;
-  }>> = {};
+    spendingClusterScore: number;
+  }> = [];
   
-  // First pass: identify all potential opportunities
+  // First pass: identify all potential opportunities based on large transactions
   largeTransactions.forEach((largeTransaction, index) => {
     const transactionDate = new Date(largeTransaction.date);
     
@@ -1749,61 +1750,100 @@ function analyzeCardOpeningMilestones(transactions: FallbackTransaction[]): Card
         }
       }
       
-      // Store this opportunity for later selection
+      // Calculate spending cluster score based on transaction density and amounts
       if (bestCard && windowSpending >= bestCard.spendingReq * 0.7) {
-        const year = potentialOpeningDate.getFullYear().toString();
-        if (!yearlyOpportunities[year]) {
-          yearlyOpportunities[year] = [];
-        }
+        // Calculate spending cluster score
+        const avgTransactionAmount = windowSpending / windowTransactions.length;
+        const largeTransactionRatio = largeTransactionsInWindow.length / windowTransactions.length;
+        const spendingDensity = windowSpending / 90; // dollars per day over 3 months
+        const proximityToLargeTransaction = 4 - monthsBefore; // Prefer closer to large transaction
         
-        yearlyOpportunities[year].push({
+        // Spending cluster score emphasizes high-value, dense spending periods
+        const spendingClusterScore = 
+          (avgTransactionAmount / mean) * 100 + // Higher than average transactions
+          (largeTransactionRatio * 500) + // Density of large transactions
+          (spendingDensity * 2) + // Daily spending rate
+          (proximityToLargeTransaction * 50) + // Timing preference
+          (bestCard.totalValue / 100); // Total card value
+        
+        allOpportunities.push({
           date: potentialOpeningDate,
           largeTransaction,
           windowSpending,
           largeTransactionsInWindow,
           monthsBefore,
-          bestCard
+          bestCard,
+          spendingClusterScore
         });
       }
     }
   });
   
-  // Second pass: select best 2 opportunities per year
-  Object.entries(yearlyOpportunities).forEach(([year, opportunities]) => {
-    // Sort opportunities by total value (descending)
-    opportunities.sort((a, b) => (b.bestCard?.totalValue || 0) - (a.bestCard?.totalValue || 0));
+  // Second pass: select best opportunities based on spending clusters and large transactions
+  console.log(`🎯 [Milestones] Analyzing ${allOpportunities.length} potential opportunities`);
+  
+  // Sort all opportunities by spending cluster score (highest first)
+  allOpportunities.sort((a, b) => b.spendingClusterScore - a.spendingClusterScore);
+  
+  // Filter opportunities to maintain proper spacing and avoid conflicts
+  const selectedOpportunities: typeof allOpportunities = [];
+  
+  allOpportunities.forEach((opportunity) => {
+    const { date: potentialOpeningDate, bestCard } = opportunity;
     
-    // Take top 2 opportunities for this year
-    const selectedOpportunities = opportunities.slice(0, 2);
+    if (!bestCard) return;
     
-    console.log(`📅 [Milestones] Year ${year}: Selected ${selectedOpportunities.length} opportunities from ${opportunities.length} candidates`);
+    // Check spacing from previously selected opportunities (minimum 3 months)
+    const hasConflict = selectedOpportunities.some(selected => {
+      const timeDiff = Math.abs(potentialOpeningDate.getTime() - selected.date.getTime());
+      const monthsDiff = timeDiff / (1000 * 60 * 60 * 24 * 30);
+      return monthsDiff < 3;
+    });
     
-    selectedOpportunities.forEach((opportunity, index) => {
-      const { date: potentialOpeningDate, largeTransaction, windowSpending, largeTransactionsInWindow, monthsBefore, bestCard } = opportunity;
+    // Check if we already recommended this card recently
+    const sameCardRecently = selectedOpportunities.some(selected => 
+      selected.bestCard?.name === bestCard.name
+    );
+    
+    if (!hasConflict && !sameCardRecently && selectedOpportunities.length < 4) { // Max 4 total recommendations
+      selectedOpportunities.push(opportunity);
+    }
+  });
+  
+  console.log(`📊 [Milestones] Selected ${selectedOpportunities.length} high-value opportunities from ${allOpportunities.length} candidates`);
+  
+  // Create milestones for selected opportunities
+  selectedOpportunities.forEach((opportunity, index) => {
+    const { date: potentialOpeningDate, largeTransaction, windowSpending, largeTransactionsInWindow, monthsBefore, bestCard, spendingClusterScore } = opportunity;
       
       if (!bestCard) return;
       
-      // Higher confidence for large transaction timing and total value
+      // Higher confidence for large transaction timing and spending cluster quality
       const baseConfidence = Math.min(windowSpending / bestCard.spendingReq, 1.5) * 0.8;
       const largeTransactionConfidenceBonus = largeTransactionsInWindow.length * 0.1;
-      const valueConfidenceBonus = Math.min(bestCard.totalValue / 1000, 0.2); // Up to 20% bonus for high value
-      const confidence = Math.min(baseConfidence + largeTransactionConfidenceBonus + valueConfidenceBonus, 1.0);
+      const valueConfidenceBonus = Math.min(bestCard.totalValue / 1000, 0.2);
+      const clusterConfidenceBonus = Math.min(spendingClusterScore / 1000, 0.15); // Bonus for high-quality spending clusters
+      const confidence = Math.min(baseConfidence + largeTransactionConfidenceBonus + valueConfidenceBonus + clusterConfidenceBonus, 1.0);
       
       // Format the milestone date
       const milestoneDate = potentialOpeningDate.toISOString().split('T')[0];
       
-      // Create detailed reasoning focused on total value and large transactions
+      // Create detailed reasoning focused on spending clusters and large transactions
       const largeTransactionDetails = largeTransactionsInWindow
         .map(t => `$${Math.abs(t.amount).toFixed(0)} (${t.description})`)
         .slice(0, 3) // Show up to 3 large transactions
         .join(', ');
       
-      const reasoning = `💰 High-value opportunity (${index + 1}/2 for ${year})! Opening ${bestCard.name.replace(/_/g, ' ')} ` +
-        `${monthsBefore} month${monthsBefore > 1 ? 's' : ''} before major spending maximizes value: ` +
-        `$${bestCard.totalValue.toFixed(0)} total value ($${windowSpending.toFixed(0)} spending, ` +
-        `${(windowSpending / bestCard.spendingReq * 100).toFixed(0)}% of requirement). ` +
-        `Key transactions: ${largeTransactionDetails}. ` +
-        `Includes sign-up bonus + ongoing rewards + credits.`;
+      const spendingDensity = windowSpending / 90; // Daily spending rate
+      const avgTransactionAmount = windowSpending / (largeTransactionsInWindow.length || 1);
+      
+      const reasoning = `🎯 Optimal spending cluster detected! Opening ${bestCard.name.replace(/_/g, ' ')} ` +
+        `${monthsBefore} month${monthsBefore > 1 ? 's' : ''} before high-spending period maximizes value: ` +
+        `$${bestCard.totalValue.toFixed(0)} total value from $${windowSpending.toFixed(0)} spending ` +
+        `(${(windowSpending / bestCard.spendingReq * 100).toFixed(0)}% of requirement). ` +
+        `Dense spending: $${spendingDensity.toFixed(0)}/day avg, $${avgTransactionAmount.toFixed(0)} avg transaction. ` +
+        `Key large transactions: ${largeTransactionDetails}. ` +
+        `Score: ${spendingClusterScore.toFixed(0)} (rank #${index + 1}).`;
       
       milestones.push({
         date: milestoneDate,
@@ -1822,16 +1862,17 @@ function analyzeCardOpeningMilestones(transactions: FallbackTransaction[]): Card
         card: bestCard.name
       });
       
-      console.log(`🎯 [Milestones] Added high-value milestone for ${bestCard.name} on ${milestoneDate}:`, {
+      console.log(`🎯 [Milestones] Added spending cluster milestone for ${bestCard.name} on ${milestoneDate}:`, {
         totalValue: bestCard.totalValue.toFixed(0),
         spendingRequirement: bestCard.spendingReq,
         upcomingSpending: windowSpending,
         largeTransactions: largeTransactionsInWindow.length,
         monthsBeforeLargeTransaction: monthsBefore,
+        spendingClusterScore: spendingClusterScore.toFixed(0),
+        spendingDensity: (windowSpending / 90).toFixed(0) + '/day',
         confidence: confidence.toFixed(2),
-        yearlyRank: index + 1
+        overallRank: index + 1
       });
-    });
   });
   
   console.log(`✅ [Milestones] Generated ${milestones.length} card opening milestones`);
