@@ -28,6 +28,19 @@ const isGoogleMapsAvailable = () => {
   return typeof window !== 'undefined' && window.google && window.google.maps;
 };
 
+// Helper function to safely create Google Maps Size object
+const createGoogleMapsSize = (width: number, height: number): google.maps.Size | undefined => {
+  if (typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.Size) {
+    try {
+      return new window.google.maps.Size(width, height);
+    } catch (error) {
+      console.warn('⚠️ [Maps] Could not create Size object:', error);
+      return undefined;
+    }
+  }
+  return undefined;
+};
+
 const BusinessSearch: React.FC<BusinessSearchProps> = ({ className = '' }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [businesses, setBusinesses] = useState<Business[]>([]);
@@ -294,15 +307,18 @@ const BusinessSearch: React.FC<BusinessSearchProps> = ({ className = '' }) => {
                   {/* User location marker */}
                   <Marker
                     position={userLocation}
-                    icon={{
-                      url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <circle cx="12" cy="12" r="8" fill="#3b82f6" stroke="white" stroke-width="2"/>
-                          <circle cx="12" cy="12" r="3" fill="white"/>
-                        </svg>
-                      `),
-                      scaledSize: isGoogleMapsAvailable() ? new window.google.maps.Size(24, 24) : undefined,
-                    }}
+                    icon={(() => {
+                      const baseIcon = {
+                        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="12" r="8" fill="#3b82f6" stroke="white" stroke-width="2"/>
+                            <circle cx="12" cy="12" r="3" fill="white"/>
+                          </svg>
+                        `),
+                      };
+                      const scaledSize = createGoogleMapsSize(24, 24);
+                      return scaledSize ? { ...baseIcon, scaledSize } : baseIcon;
+                    })()}
                     title="Your Location"
                   />
 
@@ -312,15 +328,18 @@ const BusinessSearch: React.FC<BusinessSearchProps> = ({ className = '' }) => {
                       key={business.id}
                       position={business.location}
                       onClick={() => handleMarkerClick(business)}
-                      icon={{
-                        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-                          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <circle cx="16" cy="16" r="12" fill="${getMarkerColor(business.rewardCategory)}" stroke="white" stroke-width="2"/>
-                            <text x="16" y="20" text-anchor="middle" fill="white" font-size="16" font-weight="bold">$</text>
-                          </svg>
-                        `),
-                        scaledSize: isGoogleMapsAvailable() ? new window.google.maps.Size(32, 32) : undefined,
-                      }}
+                      icon={(() => {
+                        const baseIcon = {
+                          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+                            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <circle cx="16" cy="16" r="12" fill="${getMarkerColor(business.rewardCategory)}" stroke="white" stroke-width="2"/>
+                              <text x="16" y="20" text-anchor="middle" fill="white" font-size="16" font-weight="bold">$</text>
+                            </svg>
+                          `),
+                        };
+                        const scaledSize = createGoogleMapsSize(32, 32);
+                        return scaledSize ? { ...baseIcon, scaledSize } : baseIcon;
+                      })()}
                       title={business.name}
                     />
                   ))}

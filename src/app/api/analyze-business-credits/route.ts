@@ -96,46 +96,34 @@ function createBusinessAnalysisPrompt(businessName: string, businessTypes: strin
   const cardDetailsJson = JSON.stringify(cardDetails, null, 2);
   
   return `
-Analyze the business "${businessName}" (types: ${businessTypes.join(', ')}) located at "${businessAddress}" and categorized as "${rewardCategory}" to find the best credit card recommendations from the available cards.
+Analyze the business "${businessName}" (types: ${businessTypes.join(', ')}) located at "${businessAddress}" and categorized as "${rewardCategory}" to find ONLY statement credits, annual credits, and special offers from the available cards.
 
 AVAILABLE CREDIT CARDS:
 ${cardDetailsJson}
 
-ANALYSIS REQUIREMENTS:
-1. Identify which credit cards offer the best rewards, credits, or benefits for this specific business
-2. Look for:
-   - Direct merchant credits (e.g., "Five Guys credit", "Cheesecake Factory credit")
-   - Category bonuses that match the business type
-   - Special promotions or partnerships
-   - Annual credits that could apply
-   - Statement credits for specific merchants
+CREDIT ANALYSIS REQUIREMENTS:
+ONLY look for and return:
+1. Direct merchant credits (e.g., "Five Guys credit", "Cheesecake Factory credit")
+2. Annual credits that could apply to this business type
+3. Statement credits for specific merchants or categories
+4. Special promotional offers
 
-3. For each recommendation, provide:
-   - Card name (exactly as shown in the JSON)
-   - Credit type: "statement_credit", "bonus_points", "annual_credit", or "special_offer"
-   - Credit amount (e.g., "$10 per month", "4x points", "$300 annual credit")
-   - Detailed description of the benefit
-   - Requirements (if any)
-   - Confidence score (0.0 to 1.0)
-   - Reasoning for the recommendation
+DO NOT include:
+- General category multipliers (e.g., "4x points on dining")
+- Basic reward rates
+- Card recommendations based on multipliers
 
-4. Determine the single best card overall
-5. Calculate total potential value if possible
-6. Provide overall analysis confidence
+FOCUS ON:
+- Exact business name matches in credit descriptions
+- Category-specific annual credits
+- Merchant-specific statement credits
+- Limited-time promotional offers
 
-IMPORTANT MATCHING RULES:
-- Look for exact business name matches in credit descriptions
-- Match business categories to card bonus categories
-- Consider both ongoing benefits and limited-time offers
-- Pay special attention to merchant-specific credits
-- If no specific matches, recommend based on category multipliers
-
-EXAMPLE SCENARIOS:
-- Five Guys → AMEX Gold has "Five Guys" in dining credit partners
-- Cheesecake Factory → AMEX Gold has "Cheesecake Factory" in dining credit partners  
-- Grocery store → Cards with grocery category bonuses
-- Gas station → Cards with gas station category bonuses
-- Restaurant → Cards with dining category bonuses
+EXAMPLE MATCHES:
+- Five Guys → AMEX Gold: "$10 per month dining credit includes Five Guys"
+- Cheesecake Factory → AMEX Gold: "Dining credit partners include Cheesecake Factory"
+- Grocery store → Chase Sapphire Reserve: "DoorDash non-restaurant discount"
+- Travel → Chase Sapphire Reserve: "$300 annual travel credit"
 
 Return your analysis as a JSON object with this exact structure:
 {
@@ -144,48 +132,37 @@ Return your analysis as a JSON object with this exact structure:
   "recommendations": [
     {
       "cardName": "EXACT_CARD_NAME_FROM_JSON",
-      "creditType": "statement_credit|bonus_points|annual_credit|special_offer",
-      "creditAmount": "Specific amount or multiplier",
-      "description": "Detailed description of the benefit",
+      "creditType": "statement_credit|annual_credit|special_offer",
+      "creditAmount": "Specific credit amount",
+      "description": "Detailed description of the credit/offer",
       "requirements": "Any requirements or conditions",
       "confidence": 0.95,
-      "reasoning": "Why this card is recommended for this business"
+      "reasoning": "Why this credit applies to this business"
     }
   ],
-  "bestCard": "BEST_CARD_NAME",
-  "totalPotentialValue": 120.50,
+  "bestCard": null,
+  "totalPotentialValue": null,
   "analysisConfidence": 0.88
 }
 
-Focus on finding the most valuable and relevant recommendations for spending at "${businessName}".
+IMPORTANT: Only return credits/offers that specifically apply to "${businessName}" or its category. If no specific credits are found, return an empty recommendations array.
 `;
 }
 
 function createFallbackAnalysis(businessName: string, rewardCategory: string): BusinessCreditAnalysis {
-  // Create basic recommendations based on reward category
+  // Only return actual credits, not multiplier-based recommendations
   const recommendations: CreditRecommendation[] = [];
   
-  // Add category-based recommendations
+  // Add category-specific credits only
   switch (rewardCategory) {
     case 'dining':
       recommendations.push({
         cardName: 'AMEX_GOLD',
-        creditType: 'bonus_points',
-        creditAmount: '4x points on restaurants',
-        description: 'Earn 4x Membership Rewards points on restaurants worldwide, up to $50,000 per year.',
-        confidence: 0.9,
-        reasoning: 'AMEX Gold offers the highest dining rewards rate among available cards.'
-      });
-      break;
-    
-    case 'grocery':
-      recommendations.push({
-        cardName: 'AMEX_BLUE_CASH_PREFERRED',
-        creditType: 'bonus_points',
-        creditAmount: '6% cash back on groceries',
-        description: 'Earn 6% cash back at U.S. supermarkets, up to $6,000 per year.',
-        confidence: 0.9,
-        reasoning: 'AMEX Blue Cash Preferred offers the highest grocery rewards rate.'
+        creditType: 'statement_credit',
+        creditAmount: 'Up to $120 per year',
+        description: 'Statement credits for eligible purchases at participating dining partners.',
+        confidence: 0.7,
+        reasoning: 'AMEX Gold offers dining credits that may apply to restaurant purchases.'
       });
       break;
     
@@ -194,32 +171,26 @@ function createFallbackAnalysis(businessName: string, rewardCategory: string): B
     case 'travel_hotels':
       recommendations.push({
         cardName: 'CHASE_SAPPHIRE_RESERVE',
-        creditType: 'bonus_points',
-        creditAmount: '3x-8x points on travel',
-        description: 'Earn enhanced points on travel purchases with valuable transfer partners.',
-        confidence: 0.85,
-        reasoning: 'Chase Sapphire Reserve offers excellent travel rewards and benefits.'
+        creditType: 'annual_credit',
+        creditAmount: '$300 annual travel credit',
+        description: 'Receive up to $300 in statement credits each year for travel purchases.',
+        confidence: 0.8,
+        reasoning: 'Chase Sapphire Reserve offers annual travel credits that apply to travel expenses.'
       });
       break;
     
     default:
-      recommendations.push({
-        cardName: 'WELLS_FARGO_ACTIVE_CASH',
-        creditType: 'bonus_points',
-        creditAmount: '2% cash back on all purchases',
-        description: 'Earn 2% cash back on all eligible purchases with no category restrictions.',
-        confidence: 0.7,
-        reasoning: 'Wells Fargo Active Cash provides solid rewards for general purchases.'
-      });
+      // No specific credits for other categories
+      break;
   }
 
   return {
     businessName,
     businessType: rewardCategory,
     recommendations,
-    bestCard: recommendations[0]?.cardName,
-    totalPotentialValue: 50,
-    analysisConfidence: 0.6
+    bestCard: null,
+    totalPotentialValue: null,
+    analysisConfidence: recommendations.length > 0 ? 0.6 : 0.1
   };
 }
 

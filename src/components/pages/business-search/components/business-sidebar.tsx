@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { getCategoryDisplayName, getCategoryColor } from '../../../../utils/businessCategoryMatcher';
+import { getInstantCardRecommendations, calculatePotentialValue, getEstimatedMonthlySpending } from '../../../../utils/instantCardMatcher';
 import type { Business, BusinessCreditAnalysis, CreditRecommendation } from '../../../../types/business';
+import type { InstantCardAnalysis } from '../../../../utils/instantCardMatcher';
 
 interface BusinessSidebarProps {
   business: Business | null;
@@ -11,24 +13,31 @@ interface BusinessSidebarProps {
 }
 
 const BusinessSidebar: React.FC<BusinessSidebarProps> = ({ business, isOpen, onClose }) => {
+  const [instantAnalysis, setInstantAnalysis] = useState<InstantCardAnalysis | null>(null);
   const [creditAnalysis, setCreditAnalysis] = useState<BusinessCreditAnalysis | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isAnalyzingCredits, setIsAnalyzingCredits] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
-  // Analyze business for credit opportunities when business changes
+  // Analyze business when business changes
   useEffect(() => {
     if (business && isOpen) {
+      // Instant card matching
+      const instant = getInstantCardRecommendations(business.name, business.rewardCategory);
+      setInstantAnalysis(instant);
+      
+      // Separate credit analysis
       analyzeBusiness(business);
     } else {
+      setInstantAnalysis(null);
       setCreditAnalysis(null);
       setAnalysisError(null);
     }
   }, [business, isOpen]);
 
   const analyzeBusiness = async (businessData: Business) => {
-    setIsAnalyzing(true);
+    setIsAnalyzingCredits(true);
     setAnalysisError(null);
-    console.log('🤖 [Credit Analysis] Analyzing business:', businessData.name);
+    console.log('💳 [Credit Analysis] Analyzing credits for business:', businessData.name);
 
     try {
       const response = await fetch('/api/analyze-business-credits', {
@@ -55,7 +64,7 @@ const BusinessSidebar: React.FC<BusinessSidebarProps> = ({ business, isOpen, onC
       console.error('❌ [Credit Analysis] Error:', error);
       setAnalysisError('Failed to analyze credit opportunities. Please try again.');
     } finally {
-      setIsAnalyzing(false);
+      setIsAnalyzingCredits(false);
     }
   };
 
@@ -150,20 +159,77 @@ const BusinessSidebar: React.FC<BusinessSidebarProps> = ({ business, isOpen, onC
             </div>
           </div>
 
-          {/* Credit Analysis Section */}
+          {/* Card Recommendations Section */}
           <div className="flex-1 overflow-y-auto">
             <div className="p-4">
-              <h4 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                <span className="mr-2">💳</span>
-                Credit Card Recommendations
-              </h4>
+              {/* Instant Card Recommendations */}
+              {instantAnalysis && (
+                <div className="mb-6">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                    <span className="mr-2">⚡</span>
+                    Best Cards for {instantAnalysis.categoryDisplayName}
+                  </h4>
 
-              {isAnalyzing ? (
+                  <div className="space-y-3">
+                    {instantAnalysis.recommendations.slice(0, 3).map((recommendation) => (
+                      <div 
+                        key={recommendation.cardName}
+                        className={`border rounded-lg p-4 ${
+                          recommendation.isTopChoice 
+                            ? 'border-green-200 bg-green-50' 
+                            : 'border-gray-200 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center">
+                            {recommendation.isTopChoice && (
+                              <span className="text-lg mr-2">🏆</span>
+                            )}
+                            <h6 className="font-semibold text-gray-900">
+                              {recommendation.cardDisplayName}
+                            </h6>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-lg font-bold text-green-600">
+                              {recommendation.multiplier}x
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {recommendation.rewardType.replace('_', ' ')}
+                            </div>
+                          </div>
+                        </div>
+
+                        <p className="text-sm text-gray-700 mb-2">
+                          {recommendation.description}
+                        </p>
+
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-600">
+                            Annual Fee: {recommendation.annualFee ? `$${recommendation.annualFee}` : 'Free'}
+                          </span>
+                          <span className="text-green-600 font-medium">
+                            ~${calculatePotentialValue(recommendation, getEstimatedMonthlySpending(recommendation.category)).toFixed(0)}/month value
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Credit Analysis Section */}
+              <div>
+                <h4 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                  <span className="mr-2">💳</span>
+                  Available Credits & Offers
+                </h4>
+
+              {isAnalyzingCredits ? (
                 <div className="flex items-center justify-center py-8">
                   <div className="text-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
-                    <p className="text-gray-600">Analyzing credit opportunities...</p>
-                    <p className="text-sm text-gray-500 mt-1">Finding the best cards for this business</p>
+                    <p className="text-gray-600">Analyzing available credits...</p>
+                    <p className="text-sm text-gray-500 mt-1">Checking for statement credits and special offers</p>
                   </div>
                 </div>
               ) : analysisError ? (
@@ -281,11 +347,12 @@ const BusinessSidebar: React.FC<BusinessSidebarProps> = ({ business, isOpen, onC
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="text-center py-8">
-                  <p className="text-gray-500">Select a business to see credit card recommendations</p>
+              ) : !isAnalyzingCredits && (
+                <div className="text-center py-4">
+                  <p className="text-gray-500 text-sm">No special credits found for this business</p>
                 </div>
               )}
+              </div>
             </div>
           </div>
         </div>
