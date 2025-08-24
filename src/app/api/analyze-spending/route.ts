@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: "system",
-          content: "You are a financial analyst AI that analyzes spending patterns and creates realistic spending projections. CRITICAL: When asked to generate 150-200 transactions, you MUST generate the COMPLETE list of 150-200 transactions, NOT just 20-30 samples. You must respond with valid JSON only, no additional text."
+          content: "You are a financial analyst AI that analyzes spending patterns and creates realistic spending projections. CRITICAL: When asked to generate 100-150 transactions, you MUST generate the COMPLETE list of 100-150 transactions, NOT just 20-30 samples. You must respond with valid JSON only, no additional text."
         },
         {
           role: "user",
@@ -277,15 +277,15 @@ export async function POST(request: NextRequest) {
       isArray: Array.isArray(analysis.simulatedTransactions),
       transactionCount: transactionCount,
       hasValidTransactions: hasValidTransactions,
-      threshold: 100
+      threshold: 75
     });
     
-    if (!hasValidTransactions || transactionCount < 100) {
-      console.log(`⚠️ [API] Insufficient transactions generated (${transactionCount}/100 minimum), creating fallback data`);
+    if (!hasValidTransactions || transactionCount < 75) {
+      console.log(`⚠️ [API] Insufficient transactions generated (${transactionCount}/75 minimum), creating fallback data`);
       console.log('🔍 [API] Fallback reason:', {
         noTransactions: !analysis.simulatedTransactions,
         notArray: !Array.isArray(analysis.simulatedTransactions),
-        tooFew: transactionCount < 100,
+        tooFew: transactionCount < 75,
         actualCount: transactionCount
       });
       analysis.simulatedTransactions = generateFallbackTransactions(transactionData, debtData, detectedAdjustments);
@@ -357,11 +357,11 @@ interface SimulationAdjustments {
 }
 
 function createAnalysisPrompt(transactionData: TransactionDataInput[], debtData: DebtDataInput[], simulationAdjustments?: SimulationAdjustments): string {
-  let prompt = `🚨 CRITICAL INSTRUCTION: YOU MUST GENERATE 150-200 INDIVIDUAL TRANSACTIONS 🚨
+  let prompt = `🚨 CRITICAL INSTRUCTION: YOU MUST GENERATE 100-150 INDIVIDUAL TRANSACTIONS 🚨
 
 You are an expert financial analyst with deep understanding of spending patterns and behavioral economics. Analyze the following financial data and simulate individual CREDIT CARD transactions for the next 12 months using in-context learning from the provided examples.
 
-⚠️ WARNING: DO NOT GENERATE ONLY 20-30 SAMPLE TRANSACTIONS. YOU MUST PROVIDE THE COMPLETE LIST OF 150-200 TRANSACTIONS.
+⚠️ WARNING: DO NOT GENERATE ONLY 20-30 SAMPLE TRANSACTIONS. YOU MUST PROVIDE THE COMPLETE LIST OF 100-150 TRANSACTIONS.
 
 IMPORTANT: Generate ONLY credit card transactions. Do not include:
 - Salary deposits or income
@@ -416,7 +416,7 @@ Return your response as valid JSON with this exact structure:
 
 {
   "simulatedTransactions": [
-    // MUST CONTAIN 150-200 TRANSACTIONS - DO NOT TRUNCATE THIS ARRAY
+    // MUST CONTAIN 100-150 TRANSACTIONS - DO NOT TRUNCATE THIS ARRAY
     {
       "date": "2024-07-05",
       "description": "Grocery Store",
@@ -490,7 +490,7 @@ Return your response as valid JSON with this exact structure:
     ]
   },
   "insights": {
-    "totalPredictedTransactions": 150,
+    "totalPredictedTransactions": 125,
     "recurringTransactionCount": 48,
     "averageTransactionAmount": -125.50,
     "primarySpendingCategories": ["Housing", "Groceries", "Transportation"],
@@ -718,7 +718,7 @@ Based on this data and the above adjustments, simulate individual transactions f
    - Identify statistically significant transactions (those that deviate significantly from typical spending patterns)
    - Analyze spending categories and their typical amounts and frequency
 
-2. GENERATING COMPREHENSIVE TRANSACTIONS (MINIMUM 150 TRANSACTIONS):
+2. GENERATING COMPREHENSIVE TRANSACTIONS (MINIMUM 100 TRANSACTIONS):
    - Create monthly recurring transactions: salary (1x/month), rent (1x/month), utilities (1x/month)
    - Add weekly/bi-weekly transactions: groceries (4x/month), gas (2x/month), dining (8x/month)
    - Include debt payments from debt data as monthly recurring transactions
@@ -728,8 +728,8 @@ Based on this data and the above adjustments, simulate individual transactions f
    - Include occasional statistically significant purchases based on historical patterns (those that are 2+ standard deviations from the mean transaction amount)
 
 3. TRANSACTION DISTRIBUTION PER MONTH:
-   - Month 1-12: Each month should have 12-20 transactions minimum
-   - Include: 1 salary, 1 rent, 1-2 utilities, 4 groceries, 2 gas, 6-10 other expenses
+   - Month 1-12: Each month should have 8-15 transactions minimum
+   - Include: 1 salary, 1 rent, 1-2 utilities, 4 groceries, 2 gas, 4-8 other expenses
    - Spread transactions realistically throughout each month (not all on same day)
    - Ensure chronological ordering within each month
 
@@ -747,34 +747,34 @@ Based on this data and the above adjustments, simulate individual transactions f
 
 🚨 CRITICAL REQUIREMENTS - MUST FOLLOW EXACTLY 🚨
 
-YOU MUST GENERATE EXACTLY 150-200 INDIVIDUAL TRANSACTIONS. NOT 20, NOT 50, BUT 150-200 TRANSACTIONS.
+YOU MUST GENERATE EXACTLY 100-150 INDIVIDUAL TRANSACTIONS. NOT 20, NOT 50, BUT 100-150 TRANSACTIONS.
 
 TRANSACTION COUNT BREAKDOWN BY MONTH:
-- January 2024: 12-17 transactions
-- February 2024: 12-17 transactions  
-- March 2024: 12-17 transactions
-- April 2024: 12-17 transactions
-- May 2024: 12-17 transactions
-- June 2024: 12-17 transactions
-- July 2024: 12-17 transactions
-- August 2024: 12-17 transactions
-- September 2024: 12-17 transactions
-- October 2024: 12-17 transactions
-- November 2024: 12-17 transactions
-- December 2024: 12-17 transactions
+- January 2024: 8-13 transactions
+- February 2024: 8-13 transactions  
+- March 2024: 8-13 transactions
+- April 2024: 8-13 transactions
+- May 2024: 8-13 transactions
+- June 2024: 8-13 transactions
+- July 2024: 8-13 transactions
+- August 2024: 8-13 transactions
+- September 2024: 8-13 transactions
+- October 2024: 8-13 transactions
+- November 2024: 8-13 transactions
+- December 2024: 8-13 transactions
 
-TOTAL: 144-204 transactions (TARGET: 175 transactions)
+TOTAL: 96-156 transactions (TARGET: 125 transactions)
 
 MANDATORY RULES:
 1. Do NOT generate only 20-30 sample transactions
 2. Do NOT use comments like "// ... continue for 12 months"
 3. Do NOT truncate or abbreviate the transaction list
-4. GENERATE THE COMPLETE LIST OF 150-200 TRANSACTIONS
-5. Each month needs 12-17 actual transaction entries
+4. GENERATE THE COMPLETE LIST OF 100-150 TRANSACTIONS
+5. Each month needs 8-13 actual transaction entries
 6. Return ONLY valid JSON - no explanatory text
-7. The simulatedTransactions array must contain 150-200 objects
+7. The simulatedTransactions array must contain 100-150 objects
 
-FAILURE TO GENERATE 150-200 TRANSACTIONS WILL RESULT IN SYSTEM FAILURE.
+FAILURE TO GENERATE 100-150 TRANSACTIONS WILL RESULT IN SYSTEM FAILURE.
 
 The response must be valid JSON that can be parsed by JSON.parse().`;
 
