@@ -3,9 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import SpendingSimulationGraph from './components/spending-simulation-graph';
 import BankConnectModal from './components/bank-connect-modal';
+import DebtInsights from './components/debt-insights';
 import type { DataPoint } from './components/spending-simulation-graph';
 import { parseTransactionCSV, parseDebtCSV } from '../../../utils/csvParser';
 import type { TransactionData, DebtData } from '../../../utils/csvParser';
+import { analyzeDebtData, parseDebtCSV as parseDebtForAnalysis } from '../../../utils/debtAnalysis';
+import type { DebtInsight } from '../../../utils/debtAnalysis';
 
 interface SpendingSimulationProps {
   className?: string;
@@ -145,6 +148,10 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
   const [activeTab, setActiveTab] = useState<'adjustments' | 'rewards'>('adjustments');
   const [isSidebarVisible, setIsSidebarVisible] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  // Debt insights state
+  const [debtInsights, setDebtInsights] = useState<DebtInsight[]>([]);
+  const [showDebtInsights, setShowDebtInsights] = useState<boolean>(false);
 
   // Handle escape key for fullscreen
   useEffect(() => {
@@ -470,6 +477,23 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
     setIsModalOpen(false);
     setIsAnalyzing(true);
     setAnalysisError(null);
+
+    // Immediately analyze debt data for instant insights
+    if (debtFile) {
+      try {
+        console.log('💡 [Upload] Analyzing debt data for immediate insights...');
+        const debtContent = await debtFile.text();
+        const debtAccounts = parseDebtForAnalysis(debtContent);
+        const insights = analyzeDebtData(debtAccounts);
+        
+        console.log('✅ [Upload] Generated debt insights:', insights.length);
+        setDebtInsights(insights);
+        setShowDebtInsights(true);
+      } catch (error) {
+        console.error('⚠️ [Upload] Error analyzing debt data:', error);
+        // Continue with simulation even if debt analysis fails
+      }
+    }
     
     try {
       console.log('🔄 [Upload] Starting analysis with uploaded data (testing mode: false)');
@@ -852,6 +876,14 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
           </div>
         )}
 
+        {/* Debt Insights - Show immediately after upload */}
+        {showDebtInsights && debtInsights.length > 0 && (
+          <DebtInsights 
+            insights={debtInsights}
+            isLoading={false}
+          />
+        )}
+
         {/* Main Content */}
         <main className="space-y-8">
           {isAnalyzing && !hasConnectedData ? (
@@ -1025,6 +1057,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                           showAdjustmentDataPoints={showAdjustmentDataPoints}
                           showRewardOptimization={showRewardOptimization}
                           cardMilestones={llmAnalysis?.cardMilestones || []}
+                          isLoading={isAnalyzing}
                         />
                       );
                     })()}

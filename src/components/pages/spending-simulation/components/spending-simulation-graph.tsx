@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import * as d3 from 'd3';
 
 interface DataPoint {
@@ -49,6 +49,7 @@ interface SpendingSimulationGraphProps {
   showAdjustmentDataPoints?: boolean; // Whether to show adjustment data points
   showRewardOptimization?: boolean; // Whether to show reward optimization lines
   cardMilestones?: CardMilestone[]; // Card opening milestones
+  isLoading?: boolean; // Whether the graph is in loading state
 }
 
 const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
@@ -61,7 +62,8 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
   toggledAdjustments = new Set(),
   showAdjustmentDataPoints = true,
   showRewardOptimization = false,
-  cardMilestones = []
+  cardMilestones = [],
+  isLoading = false
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -79,17 +81,132 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
     return adjustmentInfo[adjustmentKey] || { label: adjustmentKey, icon: '⚙️' };
   };
 
+  // Loading animation function
+  const renderLoadingAnimation = useCallback(() => {
+    if (!svgRef.current) return;
+
+    const svg = d3.select(svgRef.current);
+    const margin = { top: 20, right: 30, bottom: 50, left: 80 };
+    const innerWidth = width - margin.left - margin.right;
+    const innerHeight = height - margin.top - margin.bottom;
+
+    const g = svg
+      .append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+
+    // Create skeleton axes
+    g.append('g')
+      .attr('transform', `translate(0,${innerHeight})`)
+      .call(d3.axisBottom(d3.scaleTime().domain([new Date(2024, 0, 1), new Date(2024, 11, 31)]).range([0, innerWidth])))
+      .selectAll('text')
+      .style('fill', '#e5e7eb');
+
+    g.append('g')
+      .call(d3.axisLeft(d3.scaleLinear().domain([0, 1000]).range([innerHeight, 0])))
+      .selectAll('text')
+      .style('fill', '#e5e7eb');
+
+    // Add loading text
+    g.append('text')
+      .attr('x', innerWidth / 2)
+      .attr('y', innerHeight / 2 - 20)
+      .attr('text-anchor', 'middle')
+      .style('font-size', '18px')
+      .style('font-weight', 'bold')
+      .style('fill', '#6b7280')
+      .text('Analyzing your spending...');
+
+    g.append('text')
+      .attr('x', innerWidth / 2)
+      .attr('y', innerHeight / 2 + 10)
+      .attr('text-anchor', 'middle')
+      .style('font-size', '14px')
+      .style('fill', '#9ca3af')
+      .text('Generating personalized transaction simulations');
+
+    // Animated loading dots
+    const loadingDots = g.append('text')
+      .attr('x', innerWidth / 2)
+      .attr('y', innerHeight / 2 + 35)
+      .attr('text-anchor', 'middle')
+      .style('font-size', '16px')
+      .style('fill', '#3b82f6');
+
+    // Animate the dots
+    let dotCount = 0;
+    const animateDots = () => {
+      dotCount = (dotCount + 1) % 4;
+      loadingDots.text('.'.repeat(dotCount));
+    };
+    
+    const dotInterval = setInterval(animateDots, 500);
+
+    // Animated skeleton line
+    const skeletonData = Array.from({ length: 20 }, (_, i) => ({
+      x: (i / 19) * innerWidth,
+      y: innerHeight / 2 + Math.sin(i * 0.5) * 30 + Math.random() * 20 - 10
+    }));
+
+    const line = d3.line<{ x: number; y: number }>()
+      .x(d => d.x)
+      .y(d => d.y)
+      .curve(d3.curveCardinal);
+
+    const path = g.append('path')
+      .datum(skeletonData)
+      .attr('fill', 'none')
+      .attr('stroke', '#e5e7eb')
+      .attr('stroke-width', 2)
+      .attr('stroke-dasharray', '5,5')
+      .attr('d', line);
+
+    // Animate the skeleton line
+    const totalLength = path.node()?.getTotalLength() || 0;
+    path
+      .attr('stroke-dasharray', `${totalLength} ${totalLength}`)
+      .attr('stroke-dashoffset', totalLength)
+      .transition()
+      .duration(2000)
+      .ease(d3.easeLinear)
+      .attr('stroke-dashoffset', 0)
+      .on('end', function repeat() {
+        d3.select(this)
+          .attr('stroke-dashoffset', totalLength)
+          .transition()
+          .duration(2000)
+          .ease(d3.easeLinear)
+          .attr('stroke-dashoffset', 0)
+          .on('end', repeat);
+      });
+
+    // Cleanup function
+    setTimeout(() => {
+      clearInterval(dotInterval);
+    }, 30000); // Stop after 30 seconds max
+  }, [width, height]);
+
   useEffect(() => {
     console.log('🎨 [Graph] Rendering with data:', {
       dataLength: data?.length || 0,
       hasData: !!data,
       isCumulative,
       highlightedAdjustment,
+      isLoading,
       sampleData: data?.slice(0, 2)
     });
     
-    if (!svgRef.current || !data || !data.length) {
-      console.log('🚫 [Graph] Early return - no data or SVG ref');
+    if (!svgRef.current) {
+      console.log('🚫 [Graph] Early return - no SVG ref');
+      return;
+    }
+
+    // Clear previous content
+    d3.select(svgRef.current).selectAll('*').remove();
+
+    // Show loading animation if loading or no data
+    if (isLoading || !data || !data.length) {
+      console.log('⏳ [Graph] Showing loading animation');
+      renderLoadingAnimation();
       return;
     }
     
@@ -101,9 +218,6 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       console.log('🚫 [Graph] No valid data points to render');
       return;
     }
-
-    // Clear previous content
-    d3.select(svgRef.current).selectAll('*').remove();
 
     // Set up dimensions and margins
     const margin = { top: 20, right: showRewardOptimization ? 80 : 30, bottom: 50, left: 80 };
@@ -941,7 +1055,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
         d3.select(currentSvg).selectAll('.adjustment-label').remove();
       }
     };
-  }, [data, width, height, isCumulative, highlightedAdjustment, toggledAdjustments, showAdjustmentDataPoints, showRewardOptimization, cardMilestones]);
+  }, [data, width, height, isCumulative, highlightedAdjustment, toggledAdjustments, showAdjustmentDataPoints, showRewardOptimization, cardMilestones, isLoading, renderLoadingAnimation]);
 
   return (
     <div className={`spending-simulation-graph w-full ${className}`}>
