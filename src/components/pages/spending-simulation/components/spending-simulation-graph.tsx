@@ -27,6 +27,17 @@ interface DataPoint {
   cumulativeActualPoints?: number;
 }
 
+interface CardMilestone {
+  date: string;
+  cardRecommendation: string;
+  signUpBonus: string;
+  spendingRequirement: number;
+  timeframe: number;
+  reasoning: string;
+  upcomingSpending: number;
+  confidence: number;
+}
+
 interface SpendingSimulationGraphProps {
   data?: DataPoint[];
   width?: number;
@@ -37,6 +48,7 @@ interface SpendingSimulationGraphProps {
   toggledAdjustments?: Set<string>; // Which adjustments are persistently toggled
   showAdjustmentDataPoints?: boolean; // Whether to show adjustment data points
   showRewardOptimization?: boolean; // Whether to show reward optimization lines
+  cardMilestones?: CardMilestone[]; // Card opening milestones
 }
 
 const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
@@ -49,6 +61,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
   toggledAdjustments = new Set(),
   showAdjustmentDataPoints = true,
   showRewardOptimization = false,
+  cardMilestones = []
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -93,7 +106,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
     d3.select(svgRef.current).selectAll('*').remove();
 
     // Set up dimensions and margins
-    const margin = { top: 20, right: 30, bottom: 40, left: 60 };
+    const margin = { top: 20, right: showRewardOptimization ? 80 : 30, bottom: 50, left: 80 };
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
@@ -128,7 +141,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
     
     xAxis.append('text')
       .attr('x', innerWidth / 2)
-      .attr('y', 35)
+      .attr('y', 40)
       .attr('fill', 'black')
       .style('text-anchor', 'middle')
       .style('font-size', '12px')
@@ -143,7 +156,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
     
     yAxis.append('text')
       .attr('transform', 'rotate(-90)')
-      .attr('y', -40)
+      .attr('y', -60)
       .attr('x', -innerHeight / 2)
       .attr('fill', 'black')
       .style('text-anchor', 'middle')
@@ -202,7 +215,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
         
         pointsYAxis.append('text')
           .attr('transform', 'rotate(-90)')
-          .attr('y', 40)
+          .attr('y', 60)
           .attr('x', -innerHeight / 2)
           .attr('fill', 'black')
           .style('text-anchor', 'middle')
@@ -776,9 +789,151 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
       .attr('fill', 'black')
       .text(`Statistical Outliers (>${largeTransactionThreshold.toFixed(0)})`);
 
+    // Add card opening milestones
+    if (cardMilestones && cardMilestones.length > 0) {
+      console.log('🎯 [Graph] Rendering', cardMilestones.length, 'card opening milestones');
+      
+      cardMilestones.forEach((milestone, index) => {
+        const milestoneDate = new Date(milestone.date);
+        const xPosition = xScale(milestoneDate);
+        
+        // Skip if milestone is outside the visible range
+        if (xPosition < 0 || xPosition > innerWidth) {
+          return;
+        }
+        
+        // Create milestone line
+        const milestoneGroup = g.append('g')
+          .attr('class', `milestone-${index}`)
+          .style('cursor', 'pointer');
+        
+        // Vertical line
+        milestoneGroup.append('line')
+          .attr('x1', xPosition)
+          .attr('x2', xPosition)
+          .attr('y1', 0)
+          .attr('y2', innerHeight)
+          .attr('stroke', '#8b5cf6') // Purple color for milestones
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', '8,4')
+          .style('opacity', 0.8);
+        
+        // Milestone icon/marker at top
+        milestoneGroup.append('circle')
+          .attr('cx', xPosition)
+          .attr('cy', -10)
+          .attr('r', 8)
+          .attr('fill', '#8b5cf6')
+          .attr('stroke', 'white')
+          .attr('stroke-width', 2);
+        
+        // Card icon (credit card symbol)
+        milestoneGroup.append('text')
+          .attr('x', xPosition)
+          .attr('y', -6)
+          .attr('text-anchor', 'middle')
+          .attr('fill', 'white')
+          .style('font-size', '10px')
+          .style('font-weight', 'bold')
+          .text('💳');
+        
+        // Confidence indicator (opacity based on confidence)
+        milestoneGroup.style('opacity', 0.6 + (milestone.confidence * 0.4));
+        
+        // Add hover tooltip for milestone details
+        milestoneGroup
+          .on('mouseover', function(event) {
+            const tooltip = d3.select('body')
+              .append('div')
+              .attr('class', 'milestone-tooltip')
+              .style('position', 'absolute')
+              .style('visibility', 'visible')
+              .style('background', 'rgba(139, 92, 246, 0.95)')
+              .style('color', 'white')
+              .style('padding', '12px')
+              .style('border-radius', '8px')
+              .style('font-size', '12px')
+              .style('max-width', '300px')
+              .style('box-shadow', '0 4px 12px rgba(0,0,0,0.3)')
+              .style('z-index', '1000')
+              .html(`
+                <div style="font-weight: bold; margin-bottom: 8px; color: #f3f4f6;">
+                  🎯 Card Opening Opportunity
+                </div>
+                <div style="margin-bottom: 6px;">
+                  <strong>Recommended Card:</strong><br/>
+                  ${milestone.cardRecommendation}
+                </div>
+                <div style="margin-bottom: 6px;">
+                  <strong>Sign-up Bonus:</strong><br/>
+                  ${milestone.signUpBonus}
+                </div>
+                <div style="margin-bottom: 6px;">
+                  <strong>Spending Requirement:</strong><br/>
+                  $${milestone.spendingRequirement.toLocaleString()} in ${milestone.timeframe} months
+                </div>
+                <div style="margin-bottom: 6px;">
+                  <strong>Upcoming Spending:</strong><br/>
+                  $${milestone.upcomingSpending.toFixed(0)} (${((milestone.upcomingSpending / milestone.spendingRequirement) * 100).toFixed(0)}% of requirement)
+                </div>
+                <div style="margin-bottom: 6px;">
+                  <strong>Confidence:</strong><br/>
+                  ${(milestone.confidence * 100).toFixed(0)}%
+                </div>
+                <div style="font-size: 11px; opacity: 0.9; border-top: 1px solid rgba(255,255,255,0.3); padding-top: 6px; margin-top: 6px;">
+                  ${milestone.reasoning}
+                </div>
+              `);
+            
+            // Position tooltip
+            const [mouseX, mouseY] = d3.pointer(event, document.body);
+            tooltip
+              .style('left', (mouseX + 10) + 'px')
+              .style('top', (mouseY - 10) + 'px');
+          })
+          .on('mouseout', function() {
+            d3.select('body').selectAll('.milestone-tooltip').remove();
+          })
+          .on('mousemove', function(event) {
+            const [mouseX, mouseY] = d3.pointer(event, document.body);
+            d3.select('body').select('.milestone-tooltip')
+              .style('left', (mouseX + 10) + 'px')
+              .style('top', (mouseY - 10) + 'px');
+          });
+      });
+      
+      // Add milestone legend entry
+      legendY += 20;
+      
+      legend.append('line')
+        .attr('x1', 0)
+        .attr('x2', 20)
+        .attr('y1', legendY)
+        .attr('y2', legendY)
+        .attr('stroke', '#8b5cf6')
+        .attr('stroke-width', 2)
+        .attr('stroke-dasharray', '8,4');
+      
+      legend.append('circle')
+        .attr('cx', 10)
+        .attr('cy', legendY)
+        .attr('r', 4)
+        .attr('fill', '#8b5cf6')
+        .attr('stroke', 'white')
+        .attr('stroke-width', 1);
+      
+      legend.append('text')
+        .attr('x', 25)
+        .attr('y', legendY + 5)
+        .style('font-size', '12px')
+        .attr('fill', 'black')
+        .text('Card Opening Opportunities');
+    }
+
     // Cleanup tooltip and adjustment elements on component unmount
     return () => {
       d3.select('body').selectAll('.tooltip').remove();
+      d3.select('body').selectAll('.milestone-tooltip').remove();
       const currentSvg = svgRef.current;
       if (currentSvg) {
         d3.select(currentSvg).selectAll('.adjustment-background').remove();
@@ -786,7 +941,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
         d3.select(currentSvg).selectAll('.adjustment-label').remove();
       }
     };
-  }, [data, width, height, isCumulative, highlightedAdjustment, toggledAdjustments, showAdjustmentDataPoints, showRewardOptimization]);
+  }, [data, width, height, isCumulative, highlightedAdjustment, toggledAdjustments, showAdjustmentDataPoints, showRewardOptimization, cardMilestones]);
 
   return (
     <div className={`spending-simulation-graph w-full ${className}`}>

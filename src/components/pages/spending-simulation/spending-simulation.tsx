@@ -56,6 +56,17 @@ interface SeasonalPattern {
   reason: string;
 }
 
+interface CardMilestone {
+  date: string;
+  cardRecommendation: string;
+  signUpBonus: string;
+  spendingRequirement: number;
+  timeframe: number;
+  reasoning: string;
+  upcomingSpending: number;
+  confidence: number;
+}
+
 interface LLMAnalysis {
   simulatedTransactions: SimulatedTransaction[];
   patterns: {
@@ -72,6 +83,7 @@ interface LLMAnalysis {
     riskFactors: string[];
     recommendations: string[];
   };
+  cardMilestones?: CardMilestone[];
   summary: {
     projectedTotalIncome: number;
     projectedTotalExpenses: number;
@@ -739,7 +751,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                Spending Simulation
+                PerFin360
               </h1>
               <p className="text-gray-600 text-lg">
                 {isAnalyzing
@@ -747,7 +759,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                   : isAnimating
                   ? `Simulating transactions in real-time... (${animatedData.length}/${fullData.length})`
                   : hasConnectedData 
-                  ? 'Your personalized spending analysis based on your financial data.'
+                  ? '360 view with actionable insights personalized on your financial data and spending behavior.'
                   : 'Connect your financial data to get personalized spending insights and projections.'
                 }
               </p>
@@ -1012,6 +1024,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                           toggledAdjustments={toggledAdjustments}
                           showAdjustmentDataPoints={showAdjustmentDataPoints}
                           showRewardOptimization={showRewardOptimization}
+                          cardMilestones={llmAnalysis?.cardMilestones || []}
                         />
                       );
                     })()}

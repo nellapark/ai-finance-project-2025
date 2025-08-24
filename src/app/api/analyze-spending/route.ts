@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
 import { processTransactionsWithRewards, getOptimizationSummary } from '../../../utils/cardOptimization';
+import cardDetails from '../../../../card-details/top-8-common-cards.json';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -311,6 +312,18 @@ export async function POST(request: NextRequest) {
     // Update analysis with optimized transactions
     analysis.simulatedTransactions = optimizedTransactions;
 
+    // Analyze card opening milestones
+    console.log('🎯 [API] Analyzing card opening milestones...');
+    const cardMilestones = analyzeCardOpeningMilestones(optimizedTransactions as FallbackTransaction[]);
+    
+    console.log('📊 [API] Milestone summary:', {
+      totalMilestones: cardMilestones.length,
+      avgConfidence: cardMilestones.length > 0 ? 
+        (cardMilestones.reduce((sum, m) => sum + m.confidence, 0) / cardMilestones.length).toFixed(2) : 'N/A',
+      dateRange: cardMilestones.length > 0 ? 
+        `${cardMilestones[0].date} to ${cardMilestones[cardMilestones.length - 1].date}` : 'N/A'
+    });
+
     // Export simulated transactions to CSV
     try {
       await exportTransactionsToCSV(analysis.simulatedTransactions);
@@ -319,11 +332,12 @@ export async function POST(request: NextRequest) {
       console.error('❌ [API] Failed to export transactions to CSV:', exportError);
     }
 
-    // Add detected adjustments and optimization data to the response
+    // Add detected adjustments, optimization data, and milestones to the response
     const responseWithAdjustments = {
       ...analysis,
       detectedAdjustments: detectedAdjustments,
-      optimizationSummary: optimizationSummary
+      optimizationSummary: optimizationSummary,
+      cardMilestones: cardMilestones
     };
 
     return NextResponse.json(responseWithAdjustments);
@@ -1045,28 +1059,17 @@ function generateFallbackTransactions(_transactionData: TransactionDataInput[], 
 }
 
 async function readExistingCSV(): Promise<FallbackTransaction[]> {
-  console.log('📄 [Testing] Reading existing CSV file from simulated-outputs');
+  console.log('📄 [Testing] Reading fallback CSV file from simulated-outputs');
   
   const outputDir = path.join(process.cwd(), 'simulated-outputs');
-  
-  if (!fs.existsSync(outputDir)) {
-    throw new Error('simulated-outputs directory does not exist');
-  }
-  
-  // Find any CSV file in the directory
-  const files = fs.readdirSync(outputDir)
-    .filter(file => file.endsWith('.csv'))
-    .sort()
-    .reverse(); // Most recent first
-  
-  if (files.length === 0) {
-    throw new Error('No CSV files found in simulated-outputs directory');
-  }
-  
-  const csvFile = files[0];
+  const csvFile = 'fallback-simulated-transactions.csv';
   const csvPath = path.join(outputDir, csvFile);
   
-  console.log(`📄 [Testing] Using CSV file: ${csvFile}`);
+  if (!fs.existsSync(csvPath)) {
+    throw new Error(`Fallback CSV file not found: ${csvPath}`);
+  }
+  
+  console.log(`📄 [Testing] Using fallback CSV file: ${csvFile}`);
   
   const csvContent = fs.readFileSync(csvPath, 'utf8');
   const lines = csvContent.split('\n').filter(line => line.trim());
@@ -1081,8 +1084,14 @@ async function readExistingCSV(): Promise<FallbackTransaction[]> {
     const line = lines[i];
     const values = parseCSVLine(line);
     
-    if (values.length >= 9) {
-      transactions.push({
+    if (values.length >= 10) {
+      const transaction: FallbackTransaction & {
+        rewardCategory?: string;
+        optimalCard?: string;
+        optimalPoints?: number;
+        actualPoints?: number;
+        isOptimal?: boolean;
+      } = {
         date: values[0],
         description: values[1].replace(/"/g, ''),
         amount: parseFloat(values[2]) || 0,
@@ -1092,8 +1101,19 @@ async function readExistingCSV(): Promise<FallbackTransaction[]> {
         confidence: parseFloat(values[6]) || 0,
         isRecurring: values[7].toLowerCase() === 'true',
         recurringPattern: values[8].replace(/"/g, '') || null,
-        credit_card: values[9] ? values[9].replace(/"/g, '') : 'AMEX_GOLD' // Default to AMEX_GOLD if not specified
-      });
+        credit_card: values[9] ? values[9].replace(/"/g, '') : 'AMEX_GOLD'
+      };
+      
+      // Add reward optimization fields if available (columns 10-14)
+      if (values.length >= 15) {
+        transaction.rewardCategory = values[10] ? values[10].replace(/"/g, '') : undefined;
+        transaction.optimalCard = values[11] ? values[11].replace(/"/g, '') : undefined;
+        transaction.optimalPoints = values[12] ? parseFloat(values[12]) : undefined;
+        transaction.actualPoints = values[13] ? parseFloat(values[13]) : undefined;
+        transaction.isOptimal = values[14] ? values[14].toLowerCase() === 'true' : undefined;
+      }
+      
+      transactions.push(transaction as FallbackTransaction);
     }
   }
   
@@ -1539,6 +1559,163 @@ function detectSimulationAdjustments(transactionData: TransactionDataInput[], _d
   console.log(`✅ [Detection] Detected ${detectedCount} simulation adjustments to apply`);
   
   return detectedAdjustments;
+}
+
+interface CardMilestone {
+  date: string;
+  cardRecommendation: string;
+  signUpBonus: string;
+  spendingRequirement: number;
+  timeframe: number; // months
+  reasoning: string;
+  upcomingSpending: number;
+  confidence: number;
+}
+
+function analyzeCardOpeningMilestones(transactions: FallbackTransaction[]): CardMilestone[] {
+  console.log('🎯 [Milestones] Analyzing optimal card opening opportunities...');
+  
+  if (!transactions || transactions.length === 0) {
+    return [];
+  }
+
+  const milestones: CardMilestone[] = [];
+  const sortedTransactions = transactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  
+  // Group transactions by month to analyze spending patterns
+  const monthlySpending: Record<string, { total: number; transactions: FallbackTransaction[] }> = {};
+  
+  sortedTransactions.forEach(transaction => {
+    const date = new Date(transaction.date);
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    
+    if (!monthlySpending[monthKey]) {
+      monthlySpending[monthKey] = { total: 0, transactions: [] };
+    }
+    
+    monthlySpending[monthKey].total += Math.abs(transaction.amount);
+    monthlySpending[monthKey].transactions.push(transaction);
+  });
+
+  // Calculate rolling 3-month spending windows
+  const monthKeys = Object.keys(monthlySpending).sort();
+  const availableCards = Object.entries(cardDetails);
+  
+  console.log('📊 [Milestones] Monthly spending analysis:', {
+    totalMonths: monthKeys.length,
+    availableCards: availableCards.length,
+    avgMonthlySpending: Object.values(monthlySpending).reduce((sum, month) => sum + month.total, 0) / monthKeys.length
+  });
+
+  // Track when cards were "opened" to maintain spacing
+  const cardOpenings: { date: Date; card: string }[] = [];
+  
+  for (let i = 0; i < monthKeys.length - 2; i++) {
+    const currentMonth = monthKeys[i];
+    const next2Months = monthKeys.slice(i, i + 3);
+    
+    // Calculate 3-month spending window
+    const windowSpending = next2Months.reduce((total, monthKey) => {
+      return total + monthlySpending[monthKey].total;
+    }, 0);
+    
+    // Check if there's been enough time since last card opening (minimum 3 months)
+    const currentDate = new Date(currentMonth + '-01');
+    const lastOpening = cardOpenings[cardOpenings.length - 1];
+    const monthsSinceLastOpening = lastOpening ? 
+      (currentDate.getTime() - lastOpening.date.getTime()) / (1000 * 60 * 60 * 24 * 30) : 
+      Infinity;
+    
+    if (monthsSinceLastOpening < 3) {
+      continue; // Too soon since last card opening
+    }
+
+    // Find the best card for this spending period
+    let bestCard: { name: string; details: Record<string, unknown>; score: number; spendingReq: number } | null = null;
+    
+    for (const [cardName, cardData] of availableCards) {
+      const signUpBonus = (cardData as Record<string, unknown>).signUpBonus as string || '';
+      
+      // Extract spending requirement from sign-up bonus text
+      const spendingMatch = signUpBonus.match(/\$(\d+(?:,\d+)?)/);
+      const timeMatch = signUpBonus.match(/(\d+)\s+months?/);
+      
+      if (!spendingMatch || !timeMatch) continue;
+      
+      const spendingRequirement = parseInt(spendingMatch[1].replace(',', ''));
+      const timeframe = parseInt(timeMatch[1]);
+      
+      // Check if the 3-month window spending can meet the requirement
+      if (windowSpending >= spendingRequirement && timeframe <= 3) {
+        // Extract bonus amount for scoring
+        const bonusMatch = signUpBonus.match(/\$(\d+(?:,\d+)?)\s+(?:bonus|back|cash)/i);
+        const pointsMatch = signUpBonus.match(/(\d+(?:,\d+)?)\s+(?:bonus\s+)?(?:points|miles)/i);
+        
+        let bonusValue = 0;
+        if (bonusMatch) {
+          bonusValue = parseInt(bonusMatch[1].replace(',', ''));
+        } else if (pointsMatch) {
+          // Estimate points value (typically 1-2 cents per point)
+          bonusValue = parseInt(pointsMatch[1].replace(',', '')) * 0.015;
+        }
+        
+        // Score based on bonus value and how well spending fits requirement
+        const utilizationRatio = Math.min(windowSpending / spendingRequirement, 2); // Cap at 2x
+        const score = bonusValue * utilizationRatio;
+        
+        if (!bestCard || score > bestCard.score) {
+          bestCard = {
+            name: cardName,
+            details: cardData as Record<string, unknown>,
+            score,
+            spendingReq: spendingRequirement
+          };
+        }
+      }
+    }
+    
+    // If we found a good card opportunity, add it as a milestone
+    if (bestCard && windowSpending >= bestCard.spendingReq * 0.8) { // At least 80% of requirement
+      const confidence = Math.min(windowSpending / bestCard.spendingReq, 1.5) * 0.67; // Max 100% confidence
+      
+      // Determine optimal opening date (start of the high-spending period)
+      const milestoneDate = currentMonth + '-01';
+      
+      // Create reasoning
+      const reasoning = `High spending period detected ($${windowSpending.toFixed(0)} over 3 months). ` +
+        `Opening ${bestCard.name.replace(/_/g, ' ')} now allows you to meet the $${bestCard.spendingReq} ` +
+        `spending requirement naturally while earning the sign-up bonus. ` +
+        `${monthsSinceLastOpening === Infinity ? 'First card recommendation.' : 
+          `${monthsSinceLastOpening.toFixed(0)} months since last opening (good spacing).`}`;
+      
+      milestones.push({
+        date: milestoneDate,
+        cardRecommendation: bestCard.name.replace(/_/g, ' '),
+        signUpBonus: bestCard.details.signUpBonus as string,
+        spendingRequirement: bestCard.spendingReq,
+        timeframe: 3,
+        reasoning,
+        upcomingSpending: windowSpending,
+        confidence
+      });
+      
+      // Track this card opening
+      cardOpenings.push({
+        date: new Date(milestoneDate),
+        card: bestCard.name
+      });
+      
+      console.log(`🎯 [Milestones] Added milestone for ${bestCard.name} on ${milestoneDate}:`, {
+        spendingRequirement: bestCard.spendingReq,
+        upcomingSpending: windowSpending,
+        confidence: confidence.toFixed(2),
+        monthsSinceLastOpening: monthsSinceLastOpening === Infinity ? 'N/A' : monthsSinceLastOpening.toFixed(0)
+      });
+    }
+  }
+  
+  console.log(`✅ [Milestones] Generated ${milestones.length} card opening milestones`);
+  return milestones;
 }
 
 function createMockAnalysis(simulatedTransactions: FallbackTransaction[]): MockAnalysis {
