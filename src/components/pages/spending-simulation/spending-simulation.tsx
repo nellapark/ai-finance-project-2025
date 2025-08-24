@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import SpendingSimulationGraph from './components/spending-simulation-graph';
 import BankConnectModal from './components/bank-connect-modal';
 import DebtInsights from './components/debt-insights';
@@ -153,6 +153,21 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
   const [debtInsights, setDebtInsights] = useState<DebtInsight[]>([]);
   const [showDebtInsights, setShowDebtInsights] = useState<boolean>(false);
 
+  // Ref for auto-scrolling to graph
+  const graphSectionRef = useRef<HTMLElement>(null);
+
+  // Auto-scroll to graph function
+  const scrollToGraph = () => {
+    if (graphSectionRef.current) {
+      console.log('📜 [Scroll] Auto-scrolling to graph section');
+      graphSectionRef.current.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start',
+        inline: 'nearest'
+      });
+    }
+  };
+
   // Handle escape key for fullscreen
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -251,6 +266,11 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
     setIsPaused(false);
     setAnimatedData([]);
     setFullData(validTransactions);
+    
+    // Auto-scroll to graph when animation starts
+    setTimeout(() => {
+      scrollToGraph();
+    }, 100); // Small delay to ensure DOM is updated
     
     let currentIndex = 0;
     let timeoutId: NodeJS.Timeout;
@@ -904,7 +924,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
               {/* Main Content Area */}
               <div className="flex-1">
                 {/* Graph Section */}
-                <section className={`bg-gray-50 rounded-lg p-4 ${isFullscreen ? 'fixed inset-0 z-50 m-0 rounded-none' : ''}`}>
+                <section ref={graphSectionRef} className={`bg-gray-50 rounded-lg p-4 ${isFullscreen ? 'fixed inset-0 z-50 m-0 rounded-none' : ''}`}>
                   <div className="flex justify-between items-center mb-4">
                     <div>
                       <h2 className="text-xl font-semibold text-gray-800">
