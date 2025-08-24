@@ -1,0 +1,30 @@
+{
+  "rewardCategories": [
+    "travel_general",
+    "travel_flights", 
+    "travel_hotels",
+    "dining",
+    "grocery",
+    "transit_and_rideshare",
+    "gas_stations",
+    "entertainment_and_recreation",
+    "streaming_services",
+    "drugstores_and_pharmacies",
+    "fitness_and_wellness",
+    "catch_all_general_purchases"
+  ],
+  "categoryDescriptions": {
+    "travel_general": "General travel purchases including bookings through card portals",
+    "travel_flights": "Airline tickets and flight-related purchases",
+    "travel_hotels": "Hotel stays and accommodation bookings",
+    "dining": "Restaurants, takeout, delivery services, and food establishments",
+    "grocery": "Supermarkets, grocery stores, and food retailers",
+    "transit_and_rideshare": "Public transportation, rideshare services, and transit passes",
+    "gas_stations": "Fuel purchases at gas stations",
+    "entertainment_and_recreation": "Movies, concerts, events, and recreational activities",
+    "streaming_services": "Video and music streaming subscriptions",
+    "drugstores_and_pharmacies": "Pharmacy purchases and health-related items",
+    "fitness_and_wellness": "Gym memberships, fitness equipment, and wellness services",
+    "catch_all_general_purchases": "All other purchases that don't fit specific bonus categories"
+  }
+}
