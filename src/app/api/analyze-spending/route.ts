@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
+import { processTransactionsWithRewards, getOptimizationSummary } from '../../../utils/cardOptimization';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -294,6 +295,22 @@ export async function POST(request: NextRequest) {
       console.log(`✅ [API] Using LLM-generated transactions (${transactionCount} transactions)`);
     }
 
+    // Process transactions with reward optimization
+    console.log('🎯 [API] Processing transactions with reward optimization...');
+    const optimizedTransactions = processTransactionsWithRewards(analysis.simulatedTransactions);
+    const optimizationSummary = getOptimizationSummary(optimizedTransactions);
+    
+    console.log('📊 [API] Optimization summary:', {
+      totalOptimalPoints: optimizationSummary.totalOptimalPoints.toFixed(0),
+      totalActualPoints: optimizationSummary.totalActualPoints.toFixed(0),
+      pointsLost: optimizationSummary.pointsLost.toFixed(0),
+      optimizationRate: optimizationSummary.optimizationRate.toFixed(1) + '%',
+      nonOptimalTransactions: `${optimizationSummary.nonOptimalTransactions}/${optimizationSummary.totalTransactions}`
+    });
+
+    // Update analysis with optimized transactions
+    analysis.simulatedTransactions = optimizedTransactions;
+
     // Export simulated transactions to CSV
     try {
       await exportTransactionsToCSV(analysis.simulatedTransactions);
@@ -302,10 +319,11 @@ export async function POST(request: NextRequest) {
       console.error('❌ [API] Failed to export transactions to CSV:', exportError);
     }
 
-    // Add detected adjustments to the response
+    // Add detected adjustments and optimization data to the response
     const responseWithAdjustments = {
       ...analysis,
-      detectedAdjustments: detectedAdjustments
+      detectedAdjustments: detectedAdjustments,
+      optimizationSummary: optimizationSummary
     };
 
     return NextResponse.json(responseWithAdjustments);
@@ -790,10 +808,26 @@ async function exportTransactionsToCSV(transactions: FallbackTransaction[]): Pro
   console.log(`📊 [CSV Export] Exporting ${transactions.length} transactions to CSV`);
 
   // Create CSV header
-  const csvHeader = 'Date,Description,Amount,Category,Account,Type,Confidence,IsRecurring,RecurringPattern\n';
+  const csvHeader = 'Date,Description,Amount,Category,Account,Type,Confidence,IsRecurring,RecurringPattern,CreditCard,RewardCategory,OptimalCard,OptimalPoints,ActualPoints,IsOptimal\n';
 
   // Convert transactions to CSV rows
-  const csvRows = transactions.map((transaction: FallbackTransaction) => {
+  const csvRows = transactions.map((transaction: {
+    date?: string;
+    description?: string;
+    amount?: number;
+    category?: string;
+    account?: string;
+    type?: string;
+    confidence?: number;
+    isRecurring?: boolean;
+    recurringPattern?: string | null;
+    credit_card?: string;
+    rewardCategory?: string;
+    optimalCard?: string;
+    optimalPoints?: number;
+    actualPoints?: number;
+    isOptimal?: boolean;
+  }) => {
     const date = transaction.date || '';
     const description = (transaction.description || '').replace(/,/g, ';'); // Replace commas to avoid CSV issues
     const amount = transaction.amount || 0;
@@ -803,8 +837,14 @@ async function exportTransactionsToCSV(transactions: FallbackTransaction[]): Pro
     const confidence = transaction.confidence || 0;
     const isRecurring = transaction.isRecurring || false;
     const recurringPattern = (transaction.recurringPattern || '').replace(/,/g, ';');
+    const creditCard = (transaction.credit_card || '').replace(/,/g, ';');
+    const rewardCategory = (transaction.rewardCategory || '').replace(/,/g, ';');
+    const optimalCard = (transaction.optimalCard || '').replace(/,/g, ';');
+    const optimalPoints = transaction.optimalPoints || 0;
+    const actualPoints = transaction.actualPoints || 0;
+    const isOptimal = transaction.isOptimal || false;
 
-    return `${date},"${description}",${amount},"${category}","${account}","${type}",${confidence},${isRecurring},"${recurringPattern}"`;
+    return `${date},"${description}",${amount},"${category}","${account}","${type}",${confidence},${isRecurring},"${recurringPattern}","${creditCard}","${rewardCategory}","${optimalCard}",${optimalPoints},${actualPoints},${isOptimal}`;
   }).join('\n');
 
   const csvContent = csvHeader + csvRows;

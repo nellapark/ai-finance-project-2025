@@ -21,6 +21,14 @@ interface SimulatedTransaction {
   confidence: number;
   isRecurring: boolean;
   recurringPattern: string | null;
+  recurringGroup?: string;
+  // New reward optimization fields
+  credit_card?: string;
+  rewardCategory?: string;
+  optimalCard?: string;
+  optimalPoints?: number;
+  actualPoints?: number;
+  isOptimal?: boolean;
 }
 
 interface RecurringTransaction {
@@ -111,17 +119,26 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
   const [highlightedAdjustment, setHighlightedAdjustment] = useState<string | null>(null); // For hover
   const [toggledAdjustments, setToggledAdjustments] = useState<Set<string>>(new Set()); // For persistent toggle
   const [showAdjustmentDataPoints, setShowAdjustmentDataPoints] = useState<boolean>(true); // Toggle for showing/hiding adjustment data points
+  const [showRewardOptimization, setShowRewardOptimization] = useState<boolean>(false); // Toggle for reward optimization view
+  const [optimizationSummary, setOptimizationSummary] = useState<{
+    totalOptimalPoints: number;
+    totalActualPoints: number;
+    pointsLost: number;
+    optimizationRate: number;
+    nonOptimalTransactions: number;
+    totalTransactions: number;
+  } | null>(null); // Optimization summary from API
 
   const handleConnectBanks = () => {
     setIsModalOpen(true);
   };
 
   // Function to identify recurring transactions based on patterns
-  const identifyRecurringTransactions = (transactions: any[]): any[] => {
+  const identifyRecurringTransactions = (transactions: SimulatedTransaction[]): SimulatedTransaction[] => {
     console.log('🔍 [Analysis] Identifying recurring transaction patterns...');
     
     // Group transactions by similar descriptions and amounts
-    const transactionGroups: { [key: string]: any[] } = {};
+    const transactionGroups: { [key: string]: SimulatedTransaction[] } = {};
     
     transactions.forEach(transaction => {
       // Create a key based on description and approximate amount (rounded to nearest $5)
@@ -522,7 +539,17 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
       }
 
       console.log('🔄 [Client] Parsing API response...');
-      const analysis: LLMAnalysis & { detectedAdjustments?: DetectedAdjustments } = await response.json();
+      const analysis: LLMAnalysis & { 
+        detectedAdjustments?: DetectedAdjustments;
+        optimizationSummary?: {
+          totalOptimalPoints: number;
+          totalActualPoints: number;
+          pointsLost: number;
+          optimizationRate: number;
+          nonOptimalTransactions: number;
+          totalTransactions: number;
+        };
+      } = await response.json();
       
       console.log('✅ [Client] Analysis received:', {
         simulatedTransactions: analysis.simulatedTransactions?.length || 0,
@@ -539,6 +566,12 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
       if (analysis.detectedAdjustments) {
         setDetectedAdjustments(analysis.detectedAdjustments);
         console.log('🔍 [Client] Detected adjustments:', analysis.detectedAdjustments);
+      }
+
+      // Store optimization summary
+      if (analysis.optimizationSummary) {
+        setOptimizationSummary(analysis.optimizationSummary);
+        console.log('🎯 [Client] Optimization summary:', analysis.optimizationSummary);
       }
 
       // Convert LLM analysis to graph data - plot individual transaction amounts
@@ -587,7 +620,14 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
             type: transaction.type || 'Debit',
             recurringGroup: transaction.recurringGroup,
             adjustmentType: adjustmentInfo?.adjustment,
-            adjustmentCategory: adjustmentInfo?.category
+            adjustmentCategory: adjustmentInfo?.category,
+            // Add reward optimization fields
+            rewardCategory: transaction.rewardCategory,
+            optimalCard: transaction.optimalCard,
+            optimalPoints: transaction.optimalPoints,
+            actualPoints: transaction.actualPoints,
+            isOptimal: transaction.isOptimal,
+            credit_card: transaction.credit_card
           };
         });
 
@@ -977,6 +1017,73 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                 </section>
               )}
 
+              {/* Reward Optimization Summary Section */}
+              {optimizationSummary && (
+                <section className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                    💳 Credit Card Reward Optimization
+                  </h2>
+                  <p className="text-gray-600 mb-6">
+                    Analysis of your credit card usage and potential reward optimization opportunities.
+                  </p>
+                  
+                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                    {/* Total Points Earned */}
+                    <div className="bg-blue-50 rounded-lg p-4">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {optimizationSummary.totalActualPoints?.toLocaleString() || '0'}
+                      </div>
+                      <div className="text-sm text-blue-800 font-medium">Points Earned</div>
+                      <div className="text-xs text-blue-600 mt-1">With current cards</div>
+                    </div>
+
+                    {/* Potential Points */}
+                    <div className="bg-green-50 rounded-lg p-4">
+                      <div className="text-2xl font-bold text-green-600">
+                        {optimizationSummary.totalOptimalPoints?.toLocaleString() || '0'}
+                      </div>
+                      <div className="text-sm text-green-800 font-medium">Potential Points</div>
+                      <div className="text-xs text-green-600 mt-1">With optimal cards</div>
+                    </div>
+
+                    {/* Points Lost */}
+                    <div className="bg-orange-50 rounded-lg p-4">
+                      <div className="text-2xl font-bold text-orange-600">
+                        {optimizationSummary.pointsLost?.toLocaleString() || '0'}
+                      </div>
+                      <div className="text-sm text-orange-800 font-medium">Points Lost</div>
+                      <div className="text-xs text-orange-600 mt-1">Missed opportunities</div>
+                    </div>
+
+                    {/* Optimization Rate */}
+                    <div className="bg-purple-50 rounded-lg p-4">
+                      <div className="text-2xl font-bold text-purple-600">
+                        {optimizationSummary.optimizationRate?.toFixed(1) || '0'}%
+                      </div>
+                      <div className="text-sm text-purple-800 font-medium">Optimization Rate</div>
+                      <div className="text-xs text-purple-600 mt-1">Current efficiency</div>
+                    </div>
+                  </div>
+
+                  {/* Non-optimal transactions indicator */}
+                  {optimizationSummary.nonOptimalTransactions > 0 && (
+                    <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <div className="flex items-center">
+                        <div className="text-yellow-600 mr-2">⚠️</div>
+                        <div>
+                          <div className="font-medium text-yellow-800">
+                            {optimizationSummary.nonOptimalTransactions} of {optimizationSummary.totalTransactions} transactions used non-optimal cards
+                          </div>
+                          <div className="text-sm text-yellow-700 mt-1">
+                            Enable &quot;Rewards&quot; view in the graph to see which transactions could earn more points with different cards.
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </section>
+              )}
+
               {/* Graph Section */}
               <section className="bg-gray-50 rounded-lg p-6">
                                 <div className="flex justify-between items-center mb-4">
@@ -1049,6 +1156,26 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                         </button>
                         <span className="text-sm text-gray-600">Cumulative</span>
                       </div>
+
+                      {/* Reward Optimization Toggle */}
+                      {optimizationSummary && (
+                        <div className="flex items-center space-x-3 border-l border-gray-300 pl-6">
+                          <span className="text-sm text-gray-600">Rewards</span>
+                          <button
+                            onClick={() => setShowRewardOptimization(!showRewardOptimization)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
+                              showRewardOptimization ? 'bg-green-600' : 'bg-gray-200'
+                            }`}
+                          >
+                            <span
+                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                showRewardOptimization ? 'translate-x-6' : 'translate-x-1'
+                              }`}
+                            />
+                          </button>
+                          <span className="text-sm text-gray-600">Show</span>
+                        </div>
+                      )}
 
                       {/* Adjustment Data Points Toggle */}
                       {toggledAdjustments.size > 0 && (
@@ -1126,6 +1253,7 @@ const SpendingSimulation: React.FC<SpendingSimulationProps> = ({
                         highlightedAdjustment={highlightedAdjustment}
                         toggledAdjustments={toggledAdjustments}
                         showAdjustmentDataPoints={showAdjustmentDataPoints}
+                        showRewardOptimization={showRewardOptimization}
                       />
                     );
                   })()}

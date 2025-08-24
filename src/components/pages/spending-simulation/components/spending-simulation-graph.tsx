@@ -16,6 +16,15 @@ interface DataPoint {
   recurringGroup?: string; // Identifier for grouping related recurring transactions
   adjustmentType?: string; // Which adjustment this transaction triggered
   adjustmentCategory?: string; // lifeEvents, behavioralChanges, externalFactors
+  // New reward optimization fields
+  rewardCategory?: string;
+  optimalCard?: string;
+  optimalPoints?: number;
+  actualPoints?: number;
+  isOptimal?: boolean;
+  credit_card?: string;
+  cumulativeOptimalPoints?: number;
+  cumulativeActualPoints?: number;
 }
 
 interface SpendingSimulationGraphProps {
@@ -27,6 +36,7 @@ interface SpendingSimulationGraphProps {
   highlightedAdjustment?: string | null; // Which adjustment to highlight
   toggledAdjustments?: Set<string>; // Which adjustments are persistently toggled
   showAdjustmentDataPoints?: boolean; // Whether to show adjustment data points
+  showRewardOptimization?: boolean; // Whether to show reward optimization lines
 }
 
 const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
@@ -38,6 +48,7 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
   highlightedAdjustment = null,
   toggledAdjustments = new Set(),
   showAdjustmentDataPoints = true,
+  showRewardOptimization = false,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -139,12 +150,141 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
         .y((d) => yScale(d.cumulativeBalance || d.amount))
         .curve(d3.curveMonotoneX);
 
-      g.append('path')
+    g.append('path')
         .datum(validData)
-        .attr('fill', 'none')
-        .attr('stroke', '#3b82f6')
+      .attr('fill', 'none')
+      .attr('stroke', '#3b82f6')
         .attr('stroke-width', 3)
-        .attr('d', line);
+      .attr('d', line);
+
+      // Add reward optimization lines if enabled
+      if (showRewardOptimization) {
+        // Calculate cumulative points for both optimal and actual
+        let cumulativeOptimal = 0;
+        let cumulativeActual = 0;
+        const dataWithCumulativePoints = validData.map(d => {
+          cumulativeOptimal += d.optimalPoints || 0;
+          cumulativeActual += d.actualPoints || 0;
+          return {
+            ...d,
+            cumulativeOptimalPoints: cumulativeOptimal,
+            cumulativeActualPoints: cumulativeActual
+          };
+        });
+
+        // Create a separate y-scale for points (right axis)
+        const maxPoints = Math.max(
+          d3.max(dataWithCumulativePoints, d => d.cumulativeOptimalPoints || 0) || 0,
+          d3.max(dataWithCumulativePoints, d => d.cumulativeActualPoints || 0) || 0
+        );
+
+        const pointsYScale = d3
+          .scaleLinear()
+          .domain([0, maxPoints])
+          .nice()
+          .range([innerHeight, 0]);
+
+        // Add right Y axis for points
+        g.append('g')
+          .attr('transform', `translate(${innerWidth},0)`)
+          .call(d3.axisRight(pointsYScale).tickFormat(d3.format(',.0f')))
+          .append('text')
+          .attr('transform', 'rotate(-90)')
+          .attr('y', 40)
+          .attr('x', -innerHeight / 2)
+          .attr('fill', 'currentColor')
+          .style('text-anchor', 'middle')
+          .style('font-size', '12px')
+          .text('Reward Points');
+
+        // Optimal points line (green)
+        const optimalLine = d3
+          .line<DataPoint>()
+          .x((d) => xScale(d.time))
+          .y((d) => pointsYScale(d.cumulativeOptimalPoints || 0))
+          .curve(d3.curveMonotoneX);
+
+        g.append('path')
+          .datum(dataWithCumulativePoints)
+          .attr('fill', 'none')
+          .attr('stroke', '#10b981')
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', '5,5')
+          .attr('d', optimalLine)
+          .attr('class', 'optimal-points-line');
+
+        // Actual points line (orange)
+        const actualLine = d3
+          .line<DataPoint>()
+          .x((d) => xScale(d.time))
+          .y((d) => pointsYScale(d.cumulativeActualPoints || 0))
+          .curve(d3.curveMonotoneX);
+
+        g.append('path')
+          .datum(dataWithCumulativePoints)
+          .attr('fill', 'none')
+          .attr('stroke', '#f59e0b')
+          .attr('stroke-width', 2)
+          .attr('d', actualLine)
+          .attr('class', 'actual-points-line');
+
+        // Add legend for reward lines
+        const legend = g.append('g')
+          .attr('class', 'reward-legend')
+          .attr('transform', `translate(${innerWidth - 200}, 20)`);
+
+        // Spending line legend
+        legend.append('line')
+          .attr('x1', 0)
+          .attr('x2', 20)
+          .attr('y1', 0)
+          .attr('y2', 0)
+          .attr('stroke', '#3b82f6')
+          .attr('stroke-width', 3);
+
+        legend.append('text')
+          .attr('x', 25)
+          .attr('y', 0)
+          .attr('dy', '0.35em')
+          .style('font-size', '12px')
+          .attr('fill', 'currentColor')
+          .text('Spending');
+
+        // Optimal points legend
+        legend.append('line')
+          .attr('x1', 0)
+          .attr('x2', 20)
+          .attr('y1', 20)
+          .attr('y2', 20)
+          .attr('stroke', '#10b981')
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', '5,5');
+
+        legend.append('text')
+          .attr('x', 25)
+          .attr('y', 20)
+          .attr('dy', '0.35em')
+          .style('font-size', '12px')
+          .attr('fill', 'currentColor')
+          .text('Optimal Points');
+
+        // Actual points legend
+        legend.append('line')
+          .attr('x1', 0)
+          .attr('x2', 20)
+          .attr('y1', 40)
+          .attr('y2', 40)
+          .attr('stroke', '#f59e0b')
+          .attr('stroke-width', 2);
+
+        legend.append('text')
+          .attr('x', 25)
+          .attr('y', 40)
+          .attr('dy', '0.35em')
+          .style('font-size', '12px')
+          .attr('fill', 'currentColor')
+          .text('Actual Points');
+      }
     }
 
     // Add transaction points with different styles for recurring vs one-time and adjustment highlighting
@@ -174,6 +314,12 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
           if (d.adjustmentCategory === 'behavioralChanges') return '#ea580c'; // Orange for behavioral
           if (d.adjustmentCategory === 'externalFactors') return '#7c3aed'; // Purple for external
         }
+        
+        // Check for non-optimal card usage when reward optimization is enabled
+        if (showRewardOptimization && d.isOptimal === false) {
+          return '#f59e0b'; // Orange for non-optimal card usage
+        }
+        
         // Default colors
         return d.isRecurring ? '#10b981' : '#3b82f6'; // Green for recurring, blue for one-time
       })
@@ -428,7 +574,19 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
               Category: ${dataPoint.category || 'N/A'}<br/>
               Date: ${dataPoint.time.toLocaleDateString()}<br/>
               <strong>Recurring Pattern: ${relatedTransactions.length} occurrences</strong><br/>
-              ${dataPoint.confidence ? `Confidence: ${(dataPoint.confidence * 100).toFixed(0)}%` : ''}
+              ${dataPoint.confidence ? `Confidence: ${(dataPoint.confidence * 100).toFixed(0)}%<br/>` : ''}
+              ${showRewardOptimization ? `
+                <hr style="margin: 4px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.3);">
+                <strong>Reward Optimization:</strong><br/>
+                Card Used: ${dataPoint.credit_card || 'Unknown'}<br/>
+                Optimal Card: ${dataPoint.optimalCard || 'N/A'}<br/>
+                Actual Points: ${(dataPoint.actualPoints || 0).toFixed(1)}<br/>
+                Optimal Points: ${(dataPoint.optimalPoints || 0).toFixed(1)}<br/>
+                ${dataPoint.isOptimal ? 
+                  '<span style="color: #10b981;">✅ Optimal Card Used!</span>' : 
+                  `<span style="color: #f59e0b;">⚠️ Could earn ${((dataPoint.optimalPoints || 0) - (dataPoint.actualPoints || 0)).toFixed(1)} more points</span>`
+                }
+              ` : ''}
             `);
         } else {
           // Non-recurring transaction - just highlight this one
@@ -445,7 +603,19 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
               Category: ${dataPoint.category || 'N/A'}<br/>
               Date: ${dataPoint.time.toLocaleDateString()}<br/>
               ${dataPoint.isRecurring ? `Recurring: Yes` : 'One-time Transaction'}<br/>
-              ${dataPoint.confidence ? `Confidence: ${(dataPoint.confidence * 100).toFixed(0)}%` : ''}
+              ${dataPoint.confidence ? `Confidence: ${(dataPoint.confidence * 100).toFixed(0)}%<br/>` : ''}
+              ${showRewardOptimization ? `
+                <hr style="margin: 4px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.3);">
+                <strong>Reward Optimization:</strong><br/>
+                Card Used: ${dataPoint.credit_card || 'Unknown'}<br/>
+                Optimal Card: ${dataPoint.optimalCard || 'N/A'}<br/>
+                Actual Points: ${(dataPoint.actualPoints || 0).toFixed(1)}<br/>
+                Optimal Points: ${(dataPoint.optimalPoints || 0).toFixed(1)}<br/>
+                ${dataPoint.isOptimal ? 
+                  '<span style="color: #10b981;">✅ Optimal Card Used!</span>' : 
+                  `<span style="color: #f59e0b;">⚠️ Could earn ${((dataPoint.optimalPoints || 0) - (dataPoint.actualPoints || 0)).toFixed(1)} more points</span>`
+                }
+              ` : ''}
             `);
         }
       })
@@ -462,8 +632,8 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
             const point = d as DataPoint;
             return point.isRecurring ? 0.9 : 0.7;
           })
-          .attr('r', 4)
-          .attr('stroke-width', 2);
+      .attr('r', 4)
+      .attr('stroke-width', 2);
         
         // Remove any recurring connection lines
         g.selectAll('.recurring-connection-line').remove();
@@ -573,13 +743,14 @@ const SpendingSimulationGraph: React.FC<SpendingSimulationGraphProps> = ({
     // Cleanup tooltip and adjustment elements on component unmount
     return () => {
       d3.select('body').selectAll('.tooltip').remove();
-      if (svgRef.current) {
-        d3.select(svgRef.current).selectAll('.adjustment-background').remove();
-        d3.select(svgRef.current).selectAll('.adjustment-connection-line').remove();
-        d3.select(svgRef.current).selectAll('.adjustment-label').remove();
+      const currentSvg = svgRef.current;
+      if (currentSvg) {
+        d3.select(currentSvg).selectAll('.adjustment-background').remove();
+        d3.select(currentSvg).selectAll('.adjustment-connection-line').remove();
+        d3.select(currentSvg).selectAll('.adjustment-label').remove();
       }
     };
-  }, [data, width, height, isCumulative, highlightedAdjustment, toggledAdjustments, showAdjustmentDataPoints]);
+  }, [data, width, height, isCumulative, highlightedAdjustment, toggledAdjustments, showAdjustmentDataPoints, showRewardOptimization]);
 
   return (
     <div className={`spending-simulation-graph w-full ${className}`}>
